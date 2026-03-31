@@ -1,0 +1,5 @@
+# pgproto PostgreSQL extension
+comment = 'Native Protobuf support'
+default_version = '1.0'
+module_pathname = '$libdir/pgproto'
+relocatable = true
