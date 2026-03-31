@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package example;
+
+message Item {
+  string product_id = 1;
+  int32 quantity = 2;
+  int32 cents = 3;
+}
+
+message Address {
+  string street = 1;
+  string city = 2;
+  string zip = 3;
+}
+
+message PersonalInfo {
+  string first_name = 1;
+  string last_name = 2;
+}
+
+message Customer {
+  int32 id = 1;
+  
+  oneof info {
+    string email = 2;
+    PersonalInfo personal = 3;
+  }
+}
+
+message Order {
+  int32 order_id = 1;
+  Customer customer = 2;
+  repeated Item items = 3;
+  Address shipping_address = 4;
+  map<string, int32> metadata = 5;
+}

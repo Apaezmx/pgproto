@@ -111,6 +111,11 @@ CREATE OPERATOR #> (
 );
 
 
+CREATE FUNCTION pb_to_json(protobuf, text) RETURNS text
+    AS 'MODULE_PATHNAME', 'pb_to_json'
+    LANGUAGE C IMMUTABLE STRICT;
+
+
 -- Keep placeholder function for verification
 
 CREATE FUNCTION pgproto_hello() RETURNS text

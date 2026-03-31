@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y \
     postgresql-server-dev-18 \
     libprotobuf-c-dev \
     protobuf-c-compiler \
+    protobuf-compiler \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory for builds

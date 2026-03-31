@@ -8,7 +8,7 @@ Store your protobuf binary data with the rest of your data. Supports:
 - Substantial storage savings over standard JSONB.
 - GIN and standard indexing for fast retrieval.
 
-[![Coverage Status](https://img.shields.io/badge/Coverage-65.9%25-brightgreen.svg)](https://github.com/pgvector/pgvector)
+[![Coverage Status](https://img.shields.io/badge/Coverage-83.4%25-brightgreen.svg)](https://github.com/pgvector/pgvector)
 
 ## 📊 Performance Results
 
@@ -116,6 +116,66 @@ CREATE INDEX idx_pb_id ON items ((data #> '{Outer, inner, id}'::text[]));
 -- Query will use Index Scan instead of sequential scan
 EXPLAIN ANALYZE SELECT * FROM items WHERE (data #> '{Outer, inner, id}'::text[]) = 42;
 ```
+
+---
+
+## 🧪 Testing
+
+### 🟢 Regression Tests (PostgreSQL `pg_regress`)
+Run the standard PostgreSQL regression tests to verify type I/O, operators, and GIN indexing:
+
+```bash
+make installcheck
+```
+
+### 🛒 eCommerce Testbench Sandbox (Docker)
+We provide an isolated, ready-to-use testing sandbox with a pre-configured schema (`order.proto`) and sample records. This environment demonstrates advanced features like **Maps**, **Nested Navigation**, and **Human-Readable JSON conversion**.
+
+To spin it up and run queries:
+```bash
+# 1. Build and start the container
+docker-compose -f example/docker-compose.yml up -d --build
+
+# 2. Run showcase queries
+docker-compose -f example/docker-compose.yml exec db psql -U postgres -d pgproto_showcase -f /workspace/example/queries.sql
+```
+
+See [example/README.md](file:///usr/local/google/home/paezmartinez/pgproto/example/README.md) for more details.
+
+---
+
+### 🐳 Running Coverage & Leaks in Docker (Recommended)
+
+You can run both coverage capture and memory leak analysis directly inside your running Docker workspace.
+
+#### 1. 🏗️ Prerequisites (Install Tools)
+Install `lcov` and `valgrind` inside the running container as `root`:
+```bash
+docker-compose -f example/docker-compose.yml exec -u root db apt-get update
+docker-compose -f example/docker-compose.yml exec -u root db apt-get install -y lcov valgrind
+```
+
+#### 2. 🧪 Coverage Run
+Recompile the extension with profiling flags and capture data:
+```bash
+# Recompile inside container
+docker-compose -f example/docker-compose.yml exec -u postgres db make clean
+docker-compose -f example/docker-compose.yml exec -u postgres db make COPT="-O0 -fprofile-arcs -ftest-coverage"
+docker-compose -f example/docker-compose.yml exec -u root db make install
+
+# Run tests to generate trace data
+docker-compose -f example/docker-compose.yml exec -u postgres db make installcheck
+
+# Capture output (ignores negative hit counter overflows)
+docker-compose -f example/docker-compose.yml exec -u postgres db lcov --capture --directory . --output-file coverage.info --ignore-errors negative,inconsistent
+```
+
+#### 3. 🧠 Memory Leak Analysis
+Run showcase queries through `valgrind` to verify memory safety:
+```bash
+docker-compose -f example/docker-compose.yml exec -u postgres db valgrind --leak-check=full --log-file=/workspace/valgrind.log psql -U postgres -d pgproto_showcase -f /workspace/example/valgrind_full.sql
+```
+Check `valgrind.log` for memory leaks reports!
 
 ---
 

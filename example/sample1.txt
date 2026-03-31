@@ -1,0 +1,24 @@
+order_id: 1001
+customer {
+  id: 42
+  email: "alice@example.com"
+}
+items {
+  product_id: "sku-99"
+  quantity: 2
+  cents: 1999
+}
+items {
+  product_id: "sku-100"
+  quantity: 1
+  cents: 999
+}
+shipping_address {
+  street: "Main St"
+  city: "Mountain View"
+  zip: "94043"
+}
+metadata {
+  key: "priority"
+  value: 1
+}

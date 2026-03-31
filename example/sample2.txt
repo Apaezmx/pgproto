@@ -1,0 +1,22 @@
+order_id: 1002
+customer {
+  id: 43
+  personal {
+    first_name: "Bob"
+    last_name: "Smith"
+  }
+}
+items {
+  product_id: "sku-101"
+  quantity: 1
+  cents: 4999
+}
+shipping_address {
+  street: "Oak St"
+  city: "San Francisco"
+  zip: "94107"
+}
+metadata {
+  key: "priority"
+  value: 2
+}

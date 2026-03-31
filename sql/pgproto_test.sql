@@ -4,7 +4,7 @@ CREATE EXTENSION pgproto;
 CREATE TABLE pb_test (id serial, data protobuf);
 
 -- Register test schema first to avoid session caching issues in tests
-INSERT INTO pb_schemas (name, data) VALUES ('scratch/test.proto', decode('0AFE010A12736372617463682F746573742E70726F746F22170A05496E6E6572120E0A0269641801200128055202696422C6010A054F75746572121C0A05696E6E657218012001280B32062E496E6E65725205696E6E657212240A047461677318022003280B32102E4F757465722E54616773456E74727952047461677312160A0673636F726573180320032805520673636F726573120E0A01611804200128054800520161120E0A016218052001280948005201621A370A0954616773456E74727912100A036B657918012001280952036B657912140A0576616C7565180220012805520576616C75653A02380142080A0663686F696365620670726F746F33', 'hex'));
+INSERT INTO pb_schemas (name, data) VALUES ('test_data_new/test.proto', decode('0AFE010A12736372617463682F746573742E70726F746F22170A05496E6E6572120E0A0269641801200128055202696422C6010A054F75746572121C0A05696E6E657218012001280B32062E496E6E65725205696E6E657212240A047461677318022003280B32102E4F757465722E54616773456E74727952047461677312160A0673636F726573180320032805520673636F726573120E0A01611804200128054800520161120E0A016218052001280948005201621A370A0954616773456E74727912100A036B657918012001280952036B657912140A0576616C7565180220012805520576616C75653A02380142080A0663686F696365620670726F746F33', 'hex'));
 
 -- Insert valid protobuf (Tag 1, Varint 42 => 0x08 0x2a)
 INSERT INTO pb_test (data) VALUES ('\x082a');
@@ -95,5 +95,133 @@ SELECT data #> '{Outer}'::text[] FROM (SELECT data FROM pb_test ORDER BY id DESC
 -- Edge Case: Corrupt protobuf binary (short read / truncated)
 INSERT INTO pb_test (data) VALUES ('\x0A0208'::protobuf); -- Truncated inner message
 SELECT pb_get_int32(data, 1) FROM (SELECT data FROM pb_test ORDER BY id DESC LIMIT 1) s;
+
+
+-- 📈 Additional Coverage Tests
+
+-- 1. Test pb_to_json
+SELECT pb_to_json(data, 'Outer'::text) FROM pb_test WHERE id = 1;
+SELECT pb_to_json(data, 'Outer'::text) FROM pb_test WHERE id = 3;
+
+-- 2. Test pb_register_schema (Explicit)
+SELECT pb_register_schema('test_data_new/explicit_test.proto', decode('0AFE010A12736372617463682F746573742E70726F746F22170A05496E6E6572120E0A0269641801200128055202696422C6010A054F75746572121C0A05696E6E657218012001280B32062E496E6E65725205696E6E657212240A047461677318022003280B32102E4F757465722E54616773456E74727952047461677312160A0673636F726573180320032805520673636F726573120E0A01611804200128054800520161120E0A016218052001280948005201621A370A0954616773456E74727912100A036B657918012001280952036B657912140A0576616C7565180220012805520576616C75653A02380142080A0663686F696365620670726F746F33', 'hex'));
+
+-- 3. Test Navigation Edge cases & Error Paths
+SELECT pb_get_int32(data, 100) FROM pb_test WHERE id = 1; -- Tag not in message
+SELECT data -> 'Outer.inner'::text FROM pb_test WHERE id = 1; -- Field is a message, not a primitive
+SELECT data -> 'Outer..id'::text FROM pb_test WHERE id = 1; -- Empty field name
+SELECT data -> 'Outer.unknown_field'::text FROM pb_test WHERE id = 1; -- Unknown field
+
+
+-- 📊 GIN Coverage Tests
+
+-- Insert multiple wire types
+-- 0x09: Tag 1, Wire 1 (64-bit) => \x090102030405060708
+INSERT INTO pb_test_gin (data) VALUES ('\x090102030405060708');
+-- 0x0a: Tag 1, Wire 2 (Length-delimited) => \x0a03666f6f
+INSERT INTO pb_test_gin (data) VALUES ('\x0a03666f6f');
+-- 0x0d: Tag 1, Wire 5 (32-bit) => \x0d01020304
+INSERT INTO pb_test_gin (data) VALUES ('\x0d01020304');
+
+-- Force GIN index scan to trigger gin_consistent and query extractors
+SET enable_seqscan = off;
+
+-- Re-run query to hit GIN index consistent logic
+SELECT * FROM pb_test_gin WHERE data @> '\x082a'::protobuf;
+
+-- Multi-key query to trigger consistent looping (And query extraction)
+-- Query matches Tag 1=42 AND Tag 2=120
+SELECT * FROM pb_test_gin WHERE data @> '\x082a1078'::protobuf;
+
+-- Reset seqscan setting
+RESET enable_seqscan;
+
+-- Re-allocate logic (Message with > 8 fields)
+INSERT INTO pb_test_gin (data) VALUES ('\x0801\x1002\x1803\x2004\x2805\x3006\x3807\x4008\x4809\x500a');
+SELECT * FROM pb_test_gin WHERE data @> '\x0801'::protobuf;
+
+
+-- 🧭 Navigation Skipping & Contains Edge Cases
+
+-- Test skipping Length-delimited field (Field 2) to get Field 3
+-- Model: Field 1 (Varint), Field 2 (Length-delimited), Field 3 (Varint)
+-- Payload: \x0801 (Tag 1=1) \x1203666f6f (Tag 2="foo") \x182a (Tag 3=42)
+INSERT INTO pb_test (data) VALUES ('\x08011203666f6f182a'::protobuf);
+SELECT pb_get_int32(data, 3) FROM (SELECT data FROM pb_test ORDER BY id DESC LIMIT 1) s;
+
+-- Test skipping Fixed64 field (Field 1) to get Field 2
+-- Payload: \x090102030405060708 (Tag 1=Fixed64) \x102a (Tag 2=42)
+INSERT INTO pb_test (data) VALUES ('\x090102030405060708102a'::protobuf);
+SELECT pb_get_int32(data, 2) FROM (SELECT data FROM pb_test ORDER BY id DESC LIMIT 1) s;
+
+-- Test skipping Fixed32 field (Field 1) to get Field 2
+-- Payload: \x0d01020304 (Tag 1=Fixed32) \x102a (Tag 2=42)
+INSERT INTO pb_test (data) VALUES ('\x0d01020304102a'::protobuf);
+SELECT pb_get_int32(data, 2) FROM (SELECT data FROM pb_test ORDER BY id DESC LIMIT 1) s;
+
+-- Test contains (@>) with non-Varint query
+SELECT * FROM pb_test_gin WHERE data @> '\x0a03666f6f'::protobuf; -- Length-delimited string "foo"
+SELECT * FROM pb_test_gin WHERE data @> '\x090102030405060708'::protobuf; -- Fixed64
+SELECT * FROM pb_test_gin WHERE data @> '\x0d01020304'::protobuf; -- Fixed32
+
+
+-- 🎯 Name-based Success Paths & Dot Skipping
+
+-- Test pb_get_int32_by_name success
+SELECT pb_get_int32_by_name(data, 'Inner', 'id') FROM pb_test WHERE id = 1;
+
+-- Test pb_get_int32_by_name_dot success and skipping
+-- Querying 'Outer.a' (Tag 4) on row 4 which has inner, tags, scores before it.
+SELECT data -> 'Outer.a'::text FROM pb_test WHERE id = 4;
+
+
+-- 🧩 Path Navigation Edge Cases & Error Paths
+
+-- 1. Access beyond primitive in array (should error)
+SELECT data #> '{Outer, scores, 0, sub_field}'::text[] FROM pb_test WHERE id = 4;
+
+-- 2. Access beyond primitive in map (should error)
+SELECT data #> '{Outer, tags, foo, sub_field}'::text[] FROM pb_test WHERE id = 4;
+
+-- 3. Query submessage as primitive (expects varint, gets length-delimited => should error)
+SELECT data #> '{Outer, inner}'::text[] FROM pb_test WHERE id = 4;
+
+-- 4. Query invalid wire type for submessage (expects length-delimited, gets varint => should error)
+SELECT data #> '{Outer, inner, id}'::text[] FROM pb_test WHERE id = 1;
+
+
+-- 📊 JSON Error Coverage Tests
+
+-- 1. Unregistered message name
+SELECT pb_to_json(data, 'UnregisteredMessage'::text) FROM pb_test WHERE id = 1;
+
+-- 2. Corrupt binary data (Truncated message)
+SELECT pb_to_json('\x0A0208'::protobuf, 'Outer'::text);
+
+
+-- 🎯 Dynamic Registration Success & Querying
+-- 1. Register NewOuter schema dynamically
+SELECT pb_register_schema('test_data_new/new_test.proto'::text, decode('0a6f0a1c746573745f646174615f6e65772f6e65775f746573742e70726f746f221a0a084e6577496e6e6572120e0a02696418012001280552026964222b0a084e65774f75746572121f0a05696e6e657218012001280b32092e4e6577496e6e65725205696e6e6572620670726f746f33', 'hex'));
+
+-- 2. Query NewOuter using JSON conversion
+SELECT pb_to_json('\x0a02082a'::protobuf, 'NewOuter'::text);
+
+-- 3. Query NewOuter using navigation
+SELECT '\x0a02082a'::protobuf -> 'NewOuter.inner.id'::text;
+
+
+-- 🧭 Name-based Skipping of Fixed types & Unsupported Wire Types
+-- 1. Register MixedFields schema
+SELECT pb_register_schema('test_data_new/mixed_test.proto'::text, decode('0abc010a1e746573745f646174615f6e65772f6d697865645f746573742e70726f746f221c0a0a4d69786564496e6e6572120e0a02696418012001280552026964222f0a0a4d697865644f7574657212210a05696e6e657218012001280b320b2e4d69786564496e6e65725205696e6e657222430a0b4d697865644669656c647312100a03663634180120012806520366363412100a03663332180220012807520366333212100a0376616c180320012805520376616c620670726f746f33', 'hex'));
+
+-- 🧭 Name-based Skipping of All Wire Types
+-- 1. Query 'val' (Tag 3) by name, skipping f64 (Tag 1, Wire 1) and f32 (Tag 2, Wire 5)
+SELECT pb_get_int32_by_name('\x0901000000000000001502000000182a'::protobuf, 'MixedFields', 'val');
+
+-- 2. Query 'val' (Tag 3) by name, skipping v0 (Tag 1, Wire 0) and v1 (Tag 2, Wire 2)
+SELECT pb_get_int32_by_name('\x082a120568656c6c6f1864'::protobuf, 'SkipFields', 'val');
+
+-- 3. Test Unsupported Wire Type error (Wire type 3) in pb_get_int32
+SELECT pb_get_int32('\x0b0102'::protobuf, 1);
 
 

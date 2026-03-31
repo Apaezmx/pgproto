@@ -64,3 +64,6 @@ coverage-report/
 *.bc
 *.gcov
 *.desc
+scratch/
+out/
+valgrind.log

@@ -30,6 +30,21 @@ typedef struct {
 /* Global Schema Pool (Defined in pgproto.c) */
 extern upb_DefPool *s_def_pool;
 
+/* Protobuf Wire Types (proto3) */
+typedef enum {
+    PB_WIRE_VARINT = 0,
+    PB_WIRE_FIXED64 = 1,
+    PB_WIRE_LENGTH_DELIMITED = 2,
+    PB_WIRE_START_GROUP = 3,         // Deprecated
+    PB_WIRE_END_GROUP = 4,           // Deprecated
+    PB_WIRE_FIXED32 = 5
+} PbWireType;
+
+#define PB_WIRE_TYPE_MASK 0x07
+#define PB_FIELD_NUM_SHIFT 3
+#define PB_VARINT_CONT_MASK 0x80
+#define PB_VARINT_DATA_MASK 0x7F
+
 /* Helpers for hex parsing and protobuf wire format */
 static inline int
 hex_val(char c)

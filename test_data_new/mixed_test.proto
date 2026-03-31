@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+// Defining a separate file to avoid duplicate file name errors in DefPool
+message MixedInner {
+    int32 id = 1;
+}
+
+message MixedOuter {
+    MixedInner inner = 1;
+}
+
+message MixedFields {
+    fixed64 f64 = 1;
+    fixed32 f32 = 2;
+    int32 val = 3;
+}
+
+message SkipFields {
+    int32 v0 = 1;
+    string v1 = 2;
+    int32 val = 3;
+}

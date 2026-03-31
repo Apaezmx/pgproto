@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+// Defining a new message name to avoid duplicate file name/message definition errors
+message NewInner {
+    int32 id = 1;
+}
+
+message NewOuter {
+    NewInner inner = 1;
+}
+
+message MixedFields {
+    fixed64 f64 = 1;
+    fixed32 f32 = 2;
+    int32 val = 3;
+}
