@@ -53,3 +53,14 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# Coverage analysis and reports
+*.gcno
+*.gcda
+*.info
+coverage-report/
+
+# Generated build artifacts and reports
+*.bc
+*.gcov
+*.desc
