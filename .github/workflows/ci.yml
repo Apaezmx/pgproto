@@ -9,6 +9,8 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    env:
+      PG_CONFIG: /usr/lib/postgresql/18/bin/pg_config
     steps:
     - uses: actions/checkout@v3
       with:

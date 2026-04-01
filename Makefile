@@ -11,6 +11,6 @@ EXTENSION = pgproto
 DATA = sql/pgproto--1.0.sql
 REGRESS = pgproto_test
 
-PG_CONFIG = pg_config
+PG_CONFIG ?= pg_config
 PGXS := $(shell $(PG_CONFIG) --pgxs)
 include $(PGXS)
