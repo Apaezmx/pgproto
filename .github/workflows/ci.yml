@@ -76,5 +76,7 @@ jobs:
         # Grant permissions so the postgres server user can write gcda files here
         sudo chmod -R 777 .
         make installcheck
+        # Stop the server to force it to flush all .gcda profile data!
+        sudo pg_ctlcluster 18 main stop || true
         lcov --capture --directory . --output-file coverage.info --ignore-errors negative,inconsistent --ignore-errors empty
         lcov --list coverage.info
