@@ -1,0 +1,31 @@
+{
+  "name": "pgproto",
+  "abstract": "Native Protobuf support for PostgreSQL",
+  "version": "0.1.0",
+  "maintainer": "paezmartinez <paezmartinez@google.com>",
+  "license": "postgresql",
+  "provides": {
+    "pgproto": {
+      "abstract": "Native Protobuf support for PostgreSQL",
+      "file": "sql/pgproto--1.0.sql",
+      "version": "0.1.0"
+    }
+  },
+  "resources": {
+    "repository": {
+      "url": "https://github.com/Apaezmx/pgproto.git",
+      "web": "https://github.com/Apaezmx/pgproto/",
+      "type": "git"
+    }
+  },
+  "meta-spec": {
+    "version": "1.0.0",
+    "url": "https://pgxn.org/meta/spec.txt"
+  },
+  "tags": [
+    "protobuf",
+    "proto",
+    "serialization",
+    "nosql"
+  ]
+}

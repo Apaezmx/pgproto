@@ -49,3 +49,31 @@ jobs:
         files: pgproto-pg${{ matrix.pg_version }}-linux-x86_64.zip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  source-distribution:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: true
+
+    - name: Package Source Bundle for PGXN
+      run: |
+        mkdir -p dist/pgproto-0.1.0
+        # Copy source files
+        cp -R src/ dist/pgproto-0.1.0/
+        cp -R sql/ dist/pgproto-0.1.0/
+        cp Makefile dist/pgproto-0.1.0/
+        cp pgproto.control dist/pgproto-0.1.0/
+        cp META.json dist/pgproto-0.1.0/
+        cp LICENSE dist/pgproto-0.1.0/
+        cp README.md dist/pgproto-0.1.0/
+        # Zip it
+        cd dist && zip -r ../pgproto-0.1.0.zip pgproto-0.1.0/
+
+    - name: Upload Source Release Asset
+      uses: softprops/action-gh-release@v1
+      with:
+        files: pgproto-0.1.0.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
