@@ -73,7 +73,9 @@ jobs:
         make clean
         make COPT="-O0 -fprofile-arcs -ftest-coverage"
         sudo make install
-        # Grant permissions so the postgres server user can write gcda files here
+        # Grant permissions so the postgres server user can traverse into here
+        sudo chmod o+x /home/runner
+        sudo chmod o+x /home/runner/work
         sudo chmod -R 777 .
         make installcheck
         # Stop the server to force it to flush all .gcda profile data!
