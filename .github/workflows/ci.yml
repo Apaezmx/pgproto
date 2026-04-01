@@ -47,6 +47,16 @@ jobs:
       run: |
         make installcheck
 
+    - name: Upload Test Diff on Failure
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: regression-diffs
+        path: |
+          results/
+          regression.diffs
+          regression.out
+
     - name: Run Coverage with lcov
       run: |
         make clean
