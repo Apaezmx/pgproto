@@ -14,10 +14,6 @@ jobs:
       with:
         submodules: true
 
-    - name: Create runner role
-      run: |
-        sudo -u postgres createuser -s runner
-
     - name: Install dependencies
       run: |
         sudo apt-get update
@@ -42,6 +38,10 @@ jobs:
     - name: Start PostgreSQL
       run: |
         sudo systemctl start postgresql
+
+    - name: Create runner role
+      run: |
+        sudo -u postgres createuser -s runner
 
     - name: Run Regression Tests
       run: |
