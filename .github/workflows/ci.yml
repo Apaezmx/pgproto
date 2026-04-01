@@ -21,6 +21,12 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y build-essential libprotobuf-c-dev protobuf-c-compiler lcov valgrind
 
+    - name: Stop pre-existing PostgreSQL services
+      run: |
+        sudo systemctl stop postgresql || true
+        # Also stop any specific clusters if systemctl doesn't catch them all
+        sudo pg_dropcluster 16 main || true
+
     - name: Setup PostgreSQL 18
       run: |
         sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
@@ -37,9 +43,12 @@ jobs:
       run: |
         sudo make install
 
-    - name: Start PostgreSQL
+    - name: Start PostgreSQL 18 & Diagnose
       run: |
-        sudo systemctl start postgresql
+        # Explicitly start cluster 18/main so we know exactly what port it uses
+        sudo pg_ctlcluster 18 main start || true
+        # Log all running clusters for debugging
+        pg_lsclusters
 
     - name: Create runner role
       run: |
