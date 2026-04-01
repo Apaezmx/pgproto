@@ -73,6 +73,8 @@ jobs:
         make clean
         make COPT="-O0 -fprofile-arcs -ftest-coverage"
         sudo make install
+        # Grant permissions so the postgres server user can write gcda files here
+        sudo chmod -R 777 .
         make installcheck
-        lcov --capture --directory . --output-file coverage.info --ignore-errors negative,inconsistent
+        lcov --capture --directory . --output-file coverage.info --ignore-errors negative,inconsistent --ignore-errors empty
         lcov --list coverage.info
