@@ -12,14 +12,18 @@ Store your protobuf binary data with the rest of your data. Supports:
 
 ## 📊 Performance Results
 
-In benchmarks comparing 100,000 serialized protobuf messages against an equivalent JSONB structure:
+In benchmarks comparing 100,000 serialized `example.Order` messages against equivalent JSONB structures and normalized native relational schemas (using `benchmark.sh` with static fixtures):
 
-| Metric | Protobuf (`pgproto`) | JSONB (`jsonb`) | Win |
-| --- | --- | --- | --- |
-| **Storage Size** | **4.3 MB** | 8.2 MB | **📊 ~50% Saved** |
-| **Indexed Query Latency** | **15.1 ms** | 15.9 ms | **📈 Competitive / Slightly Faster** |
+| Metric | Protobuf (`pgproto`) | JSONB (`jsonb`) | Native Relational (Normalized 1:N) | Win |
+| :--- | :--- | :--- | :--- | :--- |
+| **Storage Size** | **16 MB** | 46 MB | 25 MB | **📊 ~35% smaller than Native, ~65% smaller than JSONB!** |
+| **Single-Row Lookup Latency (Indexed)** | 5.9 ms | 8.1 ms | **3.5 ms** | Native is fastest for flat lookups, but `pgproto` is close! |
+| **Full Document Retrieval Latency** | **5.9 ms** | 8.1 ms | 33.1 ms | **📈 ~5x faster than Native JOINs for full object fetch!** |
 
-*Benchmarks ran using un-optimized debug binaries on standard Linux environments. Expect higher throughput in optimized production builds.*
+> [!NOTE]
+> `pgproto` combines the storage efficiency of binary compaction with the query flexibility of JSONB, without the overhead of heavy JOINs or text parsing!
+
+*Benchmarks ran using un-optimized debug binaries on standard Linux environments.*
 
 ---
 
@@ -115,6 +119,27 @@ CREATE INDEX idx_pb_id ON items ((data #> '{Outer, inner, id}'::text[]));
 
 -- Query will use Index Scan instead of sequential scan
 EXPLAIN ANALYZE SELECT * FROM items WHERE (data #> '{Outer, inner, id}'::text[]) = 42;
+```
+
+---
+
+## 📚 Advanced Usage & Schema Evolution
+
+### Complex Types: Enums and `oneof`
+Protobuf enums and `oneof` fields map naturally to standard extraction functions:
+-   **Enums**: Encoded as standard varints on the wire. Extract them using `pb_get_int32` or the shorthand `->` operators.
+-   **Oneof**: Since `oneof` fields are just regular fields with a semantic constraint, you can query their values normally.
+
+### Schema Evolution Handling
+Protobuf’s biggest strength is seamless forward/backward compatibility:
+-   **Adding Fields**: You can safely add new fields to your `.proto` definition. Old messages in the database without the field will return `NULL` or default values when read using the new schema.
+-   **Deprecating Fields**: Deprecated fields can still be read if they exist in the binary data. If you remove a field from the schema, the engine will safely skip it during traversal.
+
+To update a schema in the registry without breaking existing data:
+```sql
+-- Update using ON CONFLICT (re-registering is safe!)
+INSERT INTO pb_schemas (name, data) VALUES ('MySchema', '\x...')
+ON CONFLICT (name) DO UPDATE SET data = EXCLUDED.data;
 ```
 
 ---
