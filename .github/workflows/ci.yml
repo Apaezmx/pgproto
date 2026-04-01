@@ -9,6 +9,8 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    env:
+      PGUSER: postgres
 
     steps:
     - uses: actions/checkout@v3
