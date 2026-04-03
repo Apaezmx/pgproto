@@ -2,7 +2,10 @@
 #define PGPROTO_H
 
 #include "postgres.h"
+#if PG_VERSION_NUM >= 160000
 #include "varatt.h"
+#endif
+
 #include "fmgr.h"
 #include "utils/builtins.h"
 #include "catalog/pg_type_d.h"
