@@ -114,11 +114,18 @@ SELECT data #> '{Outer, tags, mykey}'::text[] FROM items;
 
 `pgproto` allows you to update, insert, and delete parts of a Protobuf document without overwriting the whole column, similar to `jsonb`.
 
+> [!IMPORTANT]
+> Functions like `pb_set`, `pb_insert`, and `pb_delete` are **pure functions**. They do not modify the database in place. They return a *new* modified `protobuf` value. To persist changes, you must use them in an `UPDATE` statement and assign the return value back to the column.
+> The `pb_to_json` function seen in some examples is **not necessary** for the operation itself; it is only used to display the binary result in a human-readable format.
+
 ### Update Fields (`pb_set`)
 Update a field at a specific path. Currently supports singular primitive types (Int32, Float, Bool, String).
 
 ```sql
--- Update field 'a' in 'Outer' to value '42'
+-- To persist the change, use it in an UPDATE statement:
+UPDATE items SET data = pb_set(data, ARRAY['Outer', 'a'], '42');
+
+-- To view the result without persisting (returns JSON for display):
 SELECT pb_to_json(pb_set(data, ARRAY['Outer', 'a'], '42'), 'Outer') FROM items;
 ```
 
@@ -126,30 +133,30 @@ SELECT pb_to_json(pb_set(data, ARRAY['Outer', 'a'], '42'), 'Outer') FROM items;
 Insert an element into an array or map.
 
 ```sql
--- Insert '100' at index 0 of 'scores' array in 'Outer'
-SELECT pb_to_json(pb_insert(data, ARRAY['Outer', 'scores', '0'], '100'), 'Outer') FROM items;
+-- Persist insertion into a repeated field (array)
+UPDATE items SET data = pb_insert(data, ARRAY['Outer', 'scores', '0'], '100');
 
--- Insert new key 'key1' with value 'value1' into 'tags' map
-SELECT pb_to_json(pb_insert(data, ARRAY['Outer', 'tags', 'key1'], 'value1'), 'Outer') FROM items;
+-- Persist insertion into a map
+UPDATE items SET data = pb_insert(data, ARRAY['Outer', 'tags', 'key1'], 'value1');
 ```
 
 ### Delete Fields/Elements (`pb_delete`)
 Remove a field or specific element from an array or map.
 
 ```sql
--- Delete field 'a'
-SELECT pb_to_json(pb_delete(data, ARRAY['Outer', 'a']), 'Outer') FROM items;
+-- Persist deletion of a field
+UPDATE items SET data = pb_delete(data, ARRAY['Outer', 'a']);
 
--- Delete element at index 0 from 'scores' array
-SELECT pb_to_json(pb_delete(data, ARRAY['Outer', 'scores', '0']), 'Outer') FROM items;
+-- Persist deletion from an array
+UPDATE items SET data = pb_delete(data, ARRAY['Outer', 'scores', '0']);
 ```
 
 ### Merge Messages (`||` Operator)
 Merge two protobuf messages of the same type. Concatenation of wire format results in standard Protobuf merge (scalars overwrite, arrays append).
 
 ```sql
--- Merge two messages
-SELECT pb_to_json(msg1 || msg2, 'Outer') FROM items;
+-- Persist merge result
+UPDATE items SET data = data || other_data;
 ```
 
 ---
