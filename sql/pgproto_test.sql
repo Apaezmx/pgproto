@@ -5,6 +5,8 @@ CREATE TABLE pb_test (id serial, data protobuf);
 
 -- Register test schema first to avoid session caching issues in tests
 INSERT INTO pb_schemas (name, data) VALUES ('test_data_new/test.proto', decode('0AFE010A12736372617463682F746573742E70726F746F22170A05496E6E6572120E0A0269641801200128055202696422C6010A054F75746572121C0A05696E6E657218012001280B32062E496E6E65725205696E6E657212240A047461677318022003280B32102E4F757465722E54616773456E74727952047461677312160A0673636F726573180320032805520673636F726573120E0A01611804200128054800520161120E0A016218052001280948005201621A370A0954616773456E74727912100A036B657918012001280952036B657912140A0576616C7565180220012805520576616C75653A02380142080A0663686F696365620670726F746F33', 'hex'));
+INSERT INTO pb_schemas (name, data) VALUES ('test_data_new/coverage_test.proto', decode('0ae3020a13636f7665726167655f746573742e70726f746f22c3020a0b436f7665726167654d7367120c0a0166180120012802520166120c0a016218022001280852016212170a077374725f617272180320032809520673747241727212310a077374725f6d617018042003280b32182e436f7665726167654d73672e5374724d6170456e74727952067374724d6170121b0a09666c6f61745f6172721805200328025208666c6f617441727212370a09666c6f61745f6d617018062003280b321a2e436f7665726167654d73672e466c6f61744d6170456e7472795208666c6f61744d61701a390a0b5374724d6170456e74727912100a036b657918012001280952036b657912140a0576616c7565180220012809520576616c75653a0238011a3b0a0d466c6f61744d6170456e74727912100a036b657918012001280952036b657912140a0576616c7565180220012802520576616c75653a023801620670726f746f33', 'hex'));
+
 
 -- Insert valid protobuf (Tag 1, Varint 42 => 0x08 0x2a)
 INSERT INTO pb_test (data) VALUES ('\x082a');
@@ -223,5 +225,120 @@ SELECT pb_get_int32_by_name('\x082a120568656c6c6f1864'::protobuf, 'SkipFields', 
 
 -- 3. Test Unsupported Wire Type error (Wire type 3) in pb_get_int32
 SELECT pb_get_int32('\x0b0102'::protobuf, 1);
+
+-- 🛠️ Mutation Tests
+-- 1. Test pb_set for int32 field 'a' in Outer
+SELECT pb_to_json(pb_set(data, ARRAY['Outer', 'a'], '123'), 'Outer') FROM pb_test WHERE id = 1;
+
+-- 2. Test pb_set for string field 'b' in Outer (oneof override)
+SELECT pb_to_json(pb_set(data, ARRAY['Outer', 'b'], 'hello_world'), 'Outer') FROM pb_test WHERE id = 1;
+
+-- 🛠️ pb_insert Tests
+-- 1. Test pb_insert for array field 'scores' in Outer (append to empty)
+SELECT pb_to_json(pb_insert('\x'::protobuf, ARRAY['Outer', 'scores', '0'], '100'), 'Outer');
+
+-- 2. Test pb_insert for array field 'scores' in Outer (insert at middle)
+SELECT pb_to_json(pb_insert(pb_insert('\x'::protobuf, ARRAY['Outer', 'scores', '0'], '100'), ARRAY['Outer', 'scores', '0'], '50'), 'Outer');
+
+-- 3. Test pb_insert for map field 'tags' in Outer (insert new key)
+SELECT pb_to_json(pb_insert('\x'::protobuf, ARRAY['Outer', 'tags', 'key1'], '200'), 'Outer');
+
+-- 4. Test pb_insert for map field 'tags' in Outer (error on existing key)
+SELECT pb_to_json(pb_insert(pb_insert('\x'::protobuf, ARRAY['Outer', 'tags', 'key1'], '200'), ARRAY['Outer', 'tags', 'key1'], '300'), 'Outer');
+
+-- 5. Test pb_insert error: Array index out of bounds
+SELECT pb_insert('\x'::protobuf, ARRAY['Outer', 'scores', '1'], '100');
+
+-- 6. Test pb_insert error: Field not found
+SELECT pb_insert('\x'::protobuf, ARRAY['Outer', 'nonexistent', '0'], '100');
+
+-- 7. Test pb_insert error: Not a repeated or map field
+SELECT pb_insert('\x'::protobuf, ARRAY['Outer', 'inner', '0'], '100');
+
+-- 8. Test pb_delete for array field 'scores' in Outer
+SELECT pb_to_json(pb_delete(pb_insert(pb_insert('\x'::protobuf, ARRAY['Outer', 'scores', '0'], '100'), ARRAY['Outer', 'scores', '1'], '200'), ARRAY['Outer', 'scores', '0']), 'Outer');
+
+-- 9. Test pb_delete for map field 'tags' in Outer
+SELECT pb_to_json(pb_delete(pb_insert('\x'::protobuf, ARRAY['Outer', 'tags', 'key1'], '200'), ARRAY['Outer', 'tags', 'key1']), 'Outer');
+
+-- 10. Test pb_delete to clear field
+SELECT pb_to_json(pb_delete(pb_set('\x'::protobuf, ARRAY['Outer', 'a'], '42'), ARRAY['Outer', 'a']), 'Outer');
+
+-- 11. Test pb_merge (||) for scalar fields
+SELECT pb_to_json(pb_set('\x'::protobuf, ARRAY['Outer', 'a'], '10') || pb_set('\x'::protobuf, ARRAY['Outer', 'a'], '20'), 'Outer');
+
+-- 12. Test pb_merge (||) for arrays (append)
+SELECT pb_to_json(pb_insert('\x'::protobuf, ARRAY['Outer', 'scores', '0'], '10') || pb_insert('\x'::protobuf, ARRAY['Outer', 'scores', '0'], '20'), 'Outer');
+
+-- 13. Test pb_merge (||) for maps (different keys)
+SELECT pb_to_json(pb_insert('\x'::protobuf, ARRAY['Outer', 'tags', 'k1'], '100') || pb_insert('\x'::protobuf, ARRAY['Outer', 'tags', 'k2'], '200'), 'Outer');
+
+-- 14. Test pb_merge (||) for maps (overlapping keys)
+SELECT pb_to_json(pb_insert('\x'::protobuf, ARRAY['Outer', 'tags', 'k1'], '100') || pb_insert('\x'::protobuf, ARRAY['Outer', 'tags', 'k1'], '200'), 'Outer');
+
+-- 15. Test pb_delete error: Array index out of bounds
+SELECT pb_delete('\x'::protobuf, ARRAY['Outer', 'scores', '0']);
+
+-- 16. Test pb_delete error: Not a repeated or map field
+SELECT pb_delete('\x'::protobuf, ARRAY['Outer', 'a', '0']);
+
+-- 17. Test pb_delete error: Field not found
+SELECT pb_delete('\x'::protobuf, ARRAY['Outer', 'nonexistent']);
+
+-- 18. Test pb_set error: Unsupported type for modification
+SELECT pb_set('\x'::protobuf, ARRAY['Outer', 'tags'], 'some_value');
+
+-- 19. Test pb_set for float field 'f' in CoverageMsg
+SELECT pb_to_json(pb_set('\x'::protobuf, ARRAY['CoverageMsg', 'f'], '1.23'), 'CoverageMsg');
+
+-- 20. Test pb_set for bool field 'b' in CoverageMsg (true)
+SELECT pb_to_json(pb_set('\x'::protobuf, ARRAY['CoverageMsg', 'b'], 'true'), 'CoverageMsg');
+
+-- 21. Test pb_set for bool field 'b' in CoverageMsg (false)
+SELECT pb_to_json(pb_set('\x'::protobuf, ARRAY['CoverageMsg', 'b'], 'false'), 'CoverageMsg');
+
+-- 22. Test pb_set for bool field 'b' in CoverageMsg (invalid)
+SELECT pb_set('\x'::protobuf, ARRAY['CoverageMsg', 'b'], 'invalid');
+
+-- 23. Test pb_insert for string array 'str_arr' in CoverageMsg
+SELECT pb_to_json(pb_insert('\x'::protobuf, ARRAY['CoverageMsg', 'str_arr', '0'], 'hello'), 'CoverageMsg');
+
+-- 24. Test pb_insert for string map 'str_map' in CoverageMsg
+SELECT pb_to_json(pb_insert('\x'::protobuf, ARRAY['CoverageMsg', 'str_map', 'key1'], 'value1'), 'CoverageMsg');
+
+-- 25. Test pb_set error: Decode failure (invalid data)
+SELECT pb_set('\xff'::protobuf, ARRAY['CoverageMsg', 'f'], '1.23');
+
+-- 26. Test pb_set error: Invalid path length (too short)
+SELECT pb_set('\x'::protobuf, ARRAY['CoverageMsg'], '123');
+
+-- 27. Test pb_insert error: Invalid path length (too short)
+SELECT pb_insert('\x'::protobuf, ARRAY['CoverageMsg', 'str_arr'], '123');
+
+-- 28. Test pb_delete error: Invalid path length (too short)
+SELECT pb_delete('\x'::protobuf, ARRAY['CoverageMsg']);
+
+-- 29. Test pb_insert error: Unsupported type for array insertion
+SELECT pb_insert('\x'::protobuf, ARRAY['CoverageMsg', 'float_arr', '0'], '1.23');
+
+-- 30. Test pb_insert error: Unsupported map value type
+SELECT pb_insert('\x'::protobuf, ARRAY['CoverageMsg', 'float_map', 'key1'], '1.23');
+
+-- 31. Test pb_get_int32_by_path with field not found (returns NULL)
+SELECT pb_get_int32_by_path('\x'::protobuf, ARRAY['Outer', 'nonexistent']);
+
+-- 32. Test pb_get_int32_by_path error: Map value traversal beyond int32 not supported
+SELECT pb_get_int32_by_path(pb_insert('\x'::protobuf, ARRAY['Outer', 'tags', 'key'], '100'), ARRAY['Outer', 'tags', 'key', 'something_else']);
+
+-- 33. Test pb_set error: Empty path
+SELECT pb_set('\x'::protobuf, ARRAY[]::text[], '123');
+
+-- 34. Test pb_set error: Field not found
+SELECT pb_set('\x'::protobuf, ARRAY['CoverageMsg', 'nonexistent'], '123');
+
+-- 35. Test pb_insert error: Message not found
+SELECT pb_insert('\x'::protobuf, ARRAY['NonExistentMessage', 'f', '0'], '1.23');
+
+
 
 

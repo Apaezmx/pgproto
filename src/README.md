@@ -17,5 +17,9 @@ This directory contains the C source code for the `pgproto` PostgreSQL extension
 ### 🧭 Navigation
 *   **[`navigation.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/navigation.c)**: Implements nested field extraction by path traversal. This powers the querying engine (resolving tags, array offsets, and maps).
 
+### ✏️ Mutation
+*   **[`mutation.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/mutation.c)**: Implements modification operations (`pb_set`, `pb_insert`, `pb_delete`, `pb_merge`). Powers the update capabilities of the extension.
+
 ### 🔍 Indexing & GIN
+
 *   **[`gin.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/gin.c)**: Implements support functions for Generalized Inverted Index (GIN) lookups over Protobuf binary data. Includes extraction and consistency checks.

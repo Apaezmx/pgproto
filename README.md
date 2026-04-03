@@ -8,7 +8,8 @@ Store your protobuf binary data with the rest of your data. Supports:
 - Substantial storage savings over standard JSONB.
 - GIN and standard indexing for fast retrieval.
 
-[![Coverage Status](https://img.shields.io/badge/Coverage-83.4%25-brightgreen.svg)](https://github.com/pgvector/pgvector)
+[![Coverage Status](https://img.shields.io/badge/Coverage-87.0%25-brightgreen.svg)](https://github.com/Apaezmx/pgproto)
+
 
 ## 📊 Performance Results
 
@@ -108,6 +109,51 @@ SELECT data #> '{Outer, tags, mykey}'::text[] FROM items;
 ```
 
 ---
+
+## ✏️ Modification & CRUD Operations
+
+`pgproto` allows you to update, insert, and delete parts of a Protobuf document without overwriting the whole column, similar to `jsonb`.
+
+### Update Fields (`pb_set`)
+Update a field at a specific path. Currently supports singular primitive types (Int32, Float, Bool, String).
+
+```sql
+-- Update field 'a' in 'Outer' to value '42'
+SELECT pb_to_json(pb_set(data, ARRAY['Outer', 'a'], '42'), 'Outer') FROM items;
+```
+
+### Insert into Arrays/Maps (`pb_insert`)
+Insert an element into an array or map.
+
+```sql
+-- Insert '100' at index 0 of 'scores' array in 'Outer'
+SELECT pb_to_json(pb_insert(data, ARRAY['Outer', 'scores', '0'], '100'), 'Outer') FROM items;
+
+-- Insert new key 'key1' with value 'value1' into 'tags' map
+SELECT pb_to_json(pb_insert(data, ARRAY['Outer', 'tags', 'key1'], 'value1'), 'Outer') FROM items;
+```
+
+### Delete Fields/Elements (`pb_delete`)
+Remove a field or specific element from an array or map.
+
+```sql
+-- Delete field 'a'
+SELECT pb_to_json(pb_delete(data, ARRAY['Outer', 'a']), 'Outer') FROM items;
+
+-- Delete element at index 0 from 'scores' array
+SELECT pb_to_json(pb_delete(data, ARRAY['Outer', 'scores', '0']), 'Outer') FROM items;
+```
+
+### Merge Messages (`||` Operator)
+Merge two protobuf messages of the same type. Concatenation of wire format results in standard Protobuf merge (scalars overwrite, arrays append).
+
+```sql
+-- Merge two messages
+SELECT pb_to_json(msg1 || msg2, 'Outer') FROM items;
+```
+
+---
+
 
 ## 🗃️ Indexing
 

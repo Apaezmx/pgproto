@@ -122,4 +122,26 @@ CREATE FUNCTION pgproto_hello() RETURNS text
      AS 'MODULE_PATHNAME', 'pgproto_hello'
      LANGUAGE C IMMUTABLE STRICT;
 
+CREATE FUNCTION pb_set(protobuf, text[], text, bool DEFAULT true) RETURNS protobuf
+    AS 'MODULE_PATHNAME', 'pb_set'
+    LANGUAGE C IMMUTABLE STRICT;
+
+CREATE FUNCTION pb_insert(protobuf, text[], text) RETURNS protobuf
+    AS 'MODULE_PATHNAME', 'pb_insert'
+    LANGUAGE C IMMUTABLE STRICT;
+
+CREATE FUNCTION pb_delete(protobuf, text[]) RETURNS protobuf
+    AS 'MODULE_PATHNAME', 'pb_delete'
+    LANGUAGE C IMMUTABLE STRICT;
+
+CREATE FUNCTION pb_merge(protobuf, protobuf) RETURNS protobuf
+    AS 'MODULE_PATHNAME', 'pb_merge'
+    LANGUAGE C IMMUTABLE STRICT;
+
+CREATE OPERATOR || (
+    LEFTARG = protobuf,
+    RIGHTARG = protobuf,
+    FUNCTION = pb_merge
+);
+
 

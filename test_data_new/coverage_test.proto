@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+message CoverageMsg {
+    float f = 1;
+    bool b = 2;
+    repeated string str_arr = 3;
+    map<string, string> str_map = 4;
+    repeated float float_arr = 5;
+    map<string, float> float_map = 6;
+}
