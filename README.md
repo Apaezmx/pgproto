@@ -40,7 +40,7 @@ make
 make install # may need sudo
 ```
 
-See the [docker-compose.yml](file:///usr/local/google/home/paezmartinez/pgproto/docker-compose.yml) if you want to deploy a pre-configured local sandbox.
+See the [docker-compose.yml](./docker-compose.yml) if you want to deploy a pre-configured local sandbox.
 
 ---
 
@@ -218,7 +218,7 @@ docker-compose -f example/docker-compose.yml up -d --build
 docker-compose -f example/docker-compose.yml exec db psql -U postgres -d pgproto_showcase -f /workspace/example/queries.sql
 ```
 
-See [example/README.md](file:///usr/local/google/home/paezmartinez/pgproto/example/README.md) for more details.
+See [example/README.md](./example/README.md) for more details.
 
 ---
 
@@ -260,3 +260,10 @@ Check `valgrind.log` for memory leaks reports!
 ## 🏗️ Technical Details
 
 For historical design plans, caching mechanisms, and deeper architectural discussion, see [DESIGN.md](file:///usr/local/google/home/paezmartinez/pgproto/DESIGN.md).
+
+
+---
+
+**Disclaimer**
+
+This is a personal project. The views, code, and opinions expressed here are my own and do not represent those of my current or past employers.
