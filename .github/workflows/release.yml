@@ -66,21 +66,21 @@ jobs:
 
     - name: Package Source Bundle for PGXN
       run: |
-        mkdir -p dist/pgproto-0.2.3
+        mkdir -p dist/pgproto-0.2.4
         # Copy source files
-        cp -R src/ dist/pgproto-0.2.3/
-        cp -R sql/ dist/pgproto-0.2.3/
-        cp Makefile dist/pgproto-0.2.3/
-        cp pgproto.control dist/pgproto-0.2.3/
-        cp META.json dist/pgproto-0.2.3/
-        cp LICENSE dist/pgproto-0.2.3/
-        cp README.md dist/pgproto-0.2.3/
+        cp -R src/ dist/pgproto-0.2.4/
+        cp -R sql/ dist/pgproto-0.2.4/
+        cp Makefile dist/pgproto-0.2.4/
+        cp pgproto.control dist/pgproto-0.2.4/
+        cp META.json dist/pgproto-0.2.4/
+        cp LICENSE dist/pgproto-0.2.4/
+        cp README.md dist/pgproto-0.2.4/
         # Zip it
-        cd dist && zip -r ../pgproto-0.2.3.zip pgproto-0.2.3/
+        cd dist && zip -r ../pgproto-0.2.4.zip pgproto-0.2.4/
 
     - name: Upload Source Release Asset
       uses: softprops/action-gh-release@v1
       with:
-        files: pgproto-0.2.3.zip
+        files: pgproto-0.2.4.zip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
