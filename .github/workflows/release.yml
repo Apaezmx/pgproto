@@ -99,6 +99,9 @@ jobs:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Lowercase repo name
+      run: |
+        echo "REPO_LOWER=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
     - name: Build and push Docker image
       uses: docker/build-push-action@v4
       with:
@@ -106,8 +109,8 @@ jobs:
         file: example/Dockerfile
         push: true
         tags: |
-          ghcr.io/${{ github.repository }}:latest
-          ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+          ghcr.io/${{ env.REPO_LOWER }}:latest
+          ghcr.io/${{ env.REPO_LOWER }}:${{ github.ref_name }}
 
   build-windows:
     runs-on: windows-latest
