@@ -157,9 +157,6 @@ jobs:
 
   build-windows:
     runs-on: windows-latest
-    strategy:
-      matrix:
-        pg_version: [15, 16, 17]
     steps:
     - uses: actions/checkout@v3
       with:
@@ -173,13 +170,9 @@ jobs:
           zip
           mingw-w64-x86_64-gcc
           mingw-w64-x86_64-protobuf-c
-    - name: Install PostgreSQL
-      run: |
-        choco install postgresql${{ matrix.pg_version }} --force --params '/Password:root'
-      shell: powershell
+          mingw-w64-x86_64-postgresql
     - name: Build
       run: |
-        export PG_CONFIG="/c/Program Files/PostgreSQL/${{ matrix.pg_version }}/bin/pg_config"
         make
       shell: msys2 {0}
     - name: Package Binary
@@ -188,12 +181,13 @@ jobs:
         cp pgproto.dll dist/ || cp pgproto.so dist/
         cp sql/pgproto--1.0.sql dist/
         cp pgproto.control dist/
-        zip -r pgproto-pg${{ matrix.pg_version }}-windows-x86_64.zip dist/
+        PG_VERSION=$(pg_config --version | cut -d ' ' -f 2 | cut -d '.' -f 1)
+        zip -r pgproto-pg$PG_VERSION-windows-x86_64.zip dist/
       shell: msys2 {0}
     - name: Upload Release Asset
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v1
       with:
-        files: pgproto-pg${{ matrix.pg_version }}-windows-x86_64.zip
+        files: pgproto-pg*-windows-x86_64.zip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
