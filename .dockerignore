@@ -1,0 +1,11 @@
+.git
+.github
+*.gcda
+*.gcno
+*.o
+*.so
+out/
+results/
+scratch/
+pgproto.so
+dist/
