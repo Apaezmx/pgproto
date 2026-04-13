@@ -83,6 +83,7 @@ jobs:
         cp META.json dist/pgproto-${{ env.VERSION }}/
         cp LICENSE dist/pgproto-${{ env.VERSION }}/
         cp README.md dist/pgproto-${{ env.VERSION }}/
+        cp -R third_party/ dist/pgproto-${{ env.VERSION }}/
         # Zip it
         cd dist && zip -r ../pgproto-${{ env.VERSION }}.zip pgproto-${{ env.VERSION }}/
 
