@@ -121,9 +121,11 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y postgresql-server-dev-18 libprotobuf-c-dev protobuf-c-compiler python3-pip
         sudo pip3 install pgxnclient
+    - name: List files
+      run: ls -la
     - name: Test PGXN Install
       run: |
-        sudo pgxn install pgproto-${{ env.VERSION }}.zip
+        sudo pgxn install ./pgproto-${{ env.VERSION }}.zip
 
   publish-docker:
     runs-on: ubuntu-latest
