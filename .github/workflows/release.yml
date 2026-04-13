@@ -90,7 +90,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Upload Source Bundle Artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: pgxn-bundle
         path: pgproto-${{ env.VERSION }}.zip
@@ -100,7 +100,7 @@ jobs:
     needs: source-distribution
     steps:
     - name: Download Source Bundle
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: pgxn-bundle
     - name: Set Version
