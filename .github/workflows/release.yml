@@ -65,26 +65,54 @@ jobs:
       with:
         submodules: true
 
+    - name: Set Version
+      run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+
     - name: Package Source Bundle for PGXN
       run: |
-        mkdir -p dist/pgproto-0.2.4
+        mkdir -p dist/pgproto-${{ env.VERSION }}
         # Copy source files
-        cp -R src/ dist/pgproto-0.2.4/
-        cp -R sql/ dist/pgproto-0.2.4/
-        cp Makefile dist/pgproto-0.2.4/
-        cp pgproto.control dist/pgproto-0.2.4/
-        cp META.json dist/pgproto-0.2.4/
-        cp LICENSE dist/pgproto-0.2.4/
-        cp README.md dist/pgproto-0.2.4/
+        cp -R src/ dist/pgproto-${{ env.VERSION }}/
+        cp -R sql/ dist/pgproto-${{ env.VERSION }}/
+        cp Makefile dist/pgproto-${{ env.VERSION }}/
+        cp pgproto.control dist/pgproto-${{ env.VERSION }}/
+        cp META.json dist/pgproto-${{ env.VERSION }}/
+        cp LICENSE dist/pgproto-${{ env.VERSION }}/
+        cp README.md dist/pgproto-${{ env.VERSION }}/
         # Zip it
-        cd dist && zip -r ../pgproto-0.2.4.zip pgproto-0.2.4/
+        cd dist && zip -r ../pgproto-${{ env.VERSION }}.zip pgproto-${{ env.VERSION }}/
 
     - name: Upload Source Release Asset
       uses: softprops/action-gh-release@v1
       with:
-        files: pgproto-0.2.4.zip
+        files: pgproto-${{ env.VERSION }}.zip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload Source Bundle Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: pgxn-bundle
+        path: pgproto-${{ env.VERSION }}.zip
+
+  test-pgxn-install:
+    runs-on: ubuntu-latest
+    needs: source-distribution
+    steps:
+    - name: Download Source Bundle
+      uses: actions/download-artifact@v3
+      with:
+        name: pgxn-bundle
+    - name: Set Version
+      run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y postgresql-server-dev-18 libprotobuf-c-dev protobuf-c-compiler python3-pip
+        sudo pip3 install pgxnclient
+    - name: Test PGXN Install
+      run: |
+        sudo pgxn install pgproto-${{ env.VERSION }}.zip
 
   publish-docker:
     runs-on: ubuntu-latest
