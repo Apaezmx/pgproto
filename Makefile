@@ -1,3 +1,4 @@
+# Auto-generate third_party/upb symlink to protobuf for Google3 absolute path includes
 $(shell ln -sf protobuf third_party/upb)
 MODULE_big = pgproto
 UPB_OBJS = $(patsubst %.c,%.o,$(shell find third_party/protobuf/upb -name "*.c" ! -path "*/conformance/*" ! -path "*/stage0/*" ! -path "*/cmake/*")) \
