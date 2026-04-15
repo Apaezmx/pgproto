@@ -271,7 +271,7 @@ SELECT pb_to_json(pb_set('\x'::protobuf, ARRAY['Outer', 'a'], '10') || pb_set('\
 SELECT pb_to_json(pb_insert('\x'::protobuf, ARRAY['Outer', 'scores', '0'], '10') || pb_insert('\x'::protobuf, ARRAY['Outer', 'scores', '0'], '20'), 'Outer');
 
 -- 13. Test pb_merge (||) for maps (different keys)
-SELECT pb_to_json(pb_insert('\x'::protobuf, ARRAY['Outer', 'tags', 'k1'], '100') || pb_insert('\x'::protobuf, ARRAY['Outer', 'tags', 'k2'], '200'), 'Outer');
+SELECT pb_to_json(pb_insert('\x'::protobuf, ARRAY['Outer', 'tags', 'k1'], '100') || pb_insert('\x'::protobuf, ARRAY['Outer', 'tags', 'k2'], '200'), 'Outer')::jsonb;
 
 -- 14. Test pb_merge (||) for maps (overlapping keys)
 SELECT pb_to_json(pb_insert('\x'::protobuf, ARRAY['Outer', 'tags', 'k1'], '100') || pb_insert('\x'::protobuf, ARRAY['Outer', 'tags', 'k1'], '200'), 'Outer');

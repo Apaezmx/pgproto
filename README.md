@@ -35,6 +35,7 @@ In benchmarks comparing 100,000 serialized `example.Order` messages against equi
 Compile and install the extension (requires standard `build-essential` and `postgresql-server-dev-*`).
 
 ```sh
+git clone --recursive https://github.com/protocolbuffers/protobuf/upb pgproto
 cd pgproto
 make
 make install # may need sudo
