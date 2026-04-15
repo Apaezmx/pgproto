@@ -20,6 +20,8 @@ This directory contains the C source code for the `pgproto` PostgreSQL extension
 ### ✏️ Mutation
 *   **[`mutation.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/mutation.c)**: Implements modification operations (`pb_set`, `pb_insert`, `pb_delete`, `pb_merge`). Powers the update capabilities of the extension.
 
-### 🔍 Indexing & GIN
+### 🔍 Human-Readable Conversion
+*   **[`json.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/json.c)**: Implements JSON conversion functions (`pb_to_json`). Translates binary protobuf messages into human-readable JSON format.
 
+### 🔍 Indexing & GIN
 *   **[`gin.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/gin.c)**: Implements support functions for Generalized Inverted Index (GIN) lookups over Protobuf binary data. Includes extraction and consistency checks.

@@ -1,8 +1,8 @@
 #include "pgproto.h"
 #include <string.h>
 #include "upb/reflection/message.h"
-#include "upb/collections/array.h"
-#include "upb/collections/map.h"
+#include "upb/message/array.h"
+#include "upb/message/map.h"
 #include "upb/wire/decode.h"
 #include "upb/wire/encode.h"
 #include "upb/message/copy.h"

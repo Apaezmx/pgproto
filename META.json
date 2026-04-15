@@ -1,7 +1,7 @@
 {
   "name": "pgproto",
   "abstract": "Native Protobuf support for PostgreSQL",
-  "version": "0.2.18",
+  "version": "0.2.19",
 
 
   "maintainer": "paezmartinez <paezmartinez@google.com>",

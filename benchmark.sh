@@ -50,6 +50,7 @@ INSERT INTO bench_jsonb (data)
 SELECT pb_to_json(val::protobuf, 'example.Order')::jsonb FROM tmp_load CROSS JOIN generate_series(1, 10000);
 "
 
+
 echo "⚡ Indexing bench_proto for fast JOIN..."
 $PSQL -c "CREATE INDEX idx_proto ON bench_proto ((data #> '{example.Order, order_id}'::text[]));"
 
