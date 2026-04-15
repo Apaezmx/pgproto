@@ -1,11 +1,11 @@
 #include "pgproto.h"
 #include <string.h>
-#include "upb/reflection/message.h"
-#include "upb/message/array.h"
-#include "upb/message/map.h"
-#include "upb/wire/decode.h"
-#include "upb/wire/encode.h"
-#include "upb/message/copy.h"
+#include "third_party/upb/upb/reflection/message.h"
+#include "third_party/upb/upb/message/array.h"
+#include "third_party/upb/upb/message/map.h"
+#include "third_party/upb/upb/wire/decode.h"
+#include "third_party/upb/upb/wire/encode.h"
+#include "third_party/upb/upb/message/copy.h"
 
 
 PG_FUNCTION_INFO_V1(pb_set);

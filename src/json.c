@@ -1,7 +1,7 @@
 #include "src/pgproto.h"
-#include "upb/json/encode.h"
-#include "upb/wire/decode.h"
-#include "upb/mem/arena.h"
+#include "third_party/upb/upb/json/encode.h"
+#include "third_party/upb/upb/wire/decode.h"
+#include "third_party/upb/upb/mem/arena.h"
 
 PG_FUNCTION_INFO_V1(pb_to_json);
 
