@@ -85,7 +85,7 @@ jobs:
         cp README.md dist/pgproto-${{ env.VERSION }}/
         cp -R third_party/ dist/pgproto-${{ env.VERSION }}/
         # Debug: check if files are there
-        ls -la dist/pgproto-${{ env.VERSION }}/third_party/upb/archive/upb/reflection/def_pool.h || echo "FILE NOT FOUND"
+        ls -la dist/pgproto-${{ env.VERSION }}/third_party/protobuf/upb/reflection/def_pool.h || echo "FILE NOT FOUND"
         # Zip it
         cd dist && zip -r ../pgproto-${{ env.VERSION }}.zip pgproto-${{ env.VERSION }}/
 
