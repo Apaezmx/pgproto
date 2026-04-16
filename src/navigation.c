@@ -250,7 +250,6 @@ pb_get_int32_by_name_dot(PG_FUNCTION_ARGS)
 
     msg_def = upb_DefPool_FindMessageByName(s_def_pool, msg_name);
     if (!msg_def) {
-        pfree(path);
         elog(ERROR, "Message not found in schema registry: %s", msg_name);
     }
 
