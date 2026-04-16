@@ -175,7 +175,7 @@ jobs:
           mingw-w64-x86_64-postgresql
     - name: Build
       run: |
-        make
+        make CFLAGS="-std=c99 -Wno-declaration-after-statement -Wno-error"
       shell: msys2 {0}
     - name: Package Binary
       run: |
