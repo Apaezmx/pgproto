@@ -8,6 +8,8 @@ RUN apt-get update && apt-get install -y \
     libprotobuf-c-dev \
     protobuf-c-compiler \
     protobuf-compiler \
+    lcov \
+    valgrind \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory for builds

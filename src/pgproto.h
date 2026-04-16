@@ -80,6 +80,6 @@ decode_varint(const char **ptr, const char *end)
 }
 
 /* Schema Registry API */
-void load_all_schemas_from_db(upb_DefPool *pool);
+void pgproto_LoadAllSchemasFromDb(upb_DefPool *pool);
 
 #endif /* PGPROTO_H */

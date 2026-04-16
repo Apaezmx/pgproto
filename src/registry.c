@@ -1,51 +1,60 @@
 #include "pgproto.h"
 
 void
-load_all_schemas_from_db(upb_DefPool *pool)
+pgproto_LoadAllSchemasFromDb(upb_DefPool *pool)
 {
     int ret;
     
     SPI_connect();
     ret = SPI_execute("SELECT data FROM public.pb_schemas", true, 0);
     
-    if (ret == SPI_OK_SELECT) {
-        TupleDesc tupdesc = SPI_tuptable->tupdesc;
-        SPITupleTable *tuptable = SPI_tuptable;
+    if (ret != SPI_OK_SELECT) {
+        elog(WARNING, "Failed to select schemas from database: %d", ret);
+        SPI_finish();
+        return;
+    }
+
+    TupleDesc tupdesc = SPI_tuptable->tupdesc;
+    SPITupleTable *tuptable = SPI_tuptable;
+    
+    for (int i = 0; i < tuptable->numvals; i++) {
+        HeapTuple tuple = tuptable->vals[i];
+        bool is_null;
+        Datum data_datum = SPI_getbinval(tuple, tupdesc, 1, &is_null);
         
-        for (int i = 0; i < tuptable->numvals; i++) {
-            HeapTuple tuple = tuptable->vals[i];
-            bool is_null;
-            Datum data_datum = SPI_getbinval(tuple, tupdesc, 1, &is_null);
+        if (is_null) {
+            continue;
+        }
+
+        bytea *data = DatumGetByteaP(data_datum);
+        size_t data_len = VARSIZE_ANY_EXHDR(data);
+        char *data_ptr = VARDATA_ANY(data);
+        
+        upb_Arena *arena = upb_Arena_New();
+        if (!arena) {
+            elog(WARNING, "Failed to create arena for schema loading");
+            continue;
+        }
+
+        google_protobuf_FileDescriptorSet *set = google_protobuf_FileDescriptorSet_parse(data_ptr, data_len, arena);
+        if (!set) {
+            elog(WARNING, "Failed to parse FileDescriptorSet");
+            upb_Arena_Free(arena);
+            continue;
+        }
+
+        size_t file_count = 0;
+        const google_protobuf_FileDescriptorProto *const *files = google_protobuf_FileDescriptorSet_file(set, &file_count);
+        
+        for (size_t j = 0; j < file_count; j++) {
+            upb_Status status;
             
-            if (!is_null) {
-                bytea *data = DatumGetByteaP(data_datum);
-                size_t data_len = VARSIZE_ANY_EXHDR(data);
-                char *data_ptr = VARDATA_ANY(data);
-                
-                upb_Arena *arena = upb_Arena_New();
-                if (arena) {
-                    google_protobuf_FileDescriptorSet *set = google_protobuf_FileDescriptorSet_parse(data_ptr, data_len, arena);
-                    if (set) {
-                        size_t file_count = 0;
-                        const google_protobuf_FileDescriptorProto *const *files = google_protobuf_FileDescriptorSet_file(set, &file_count);
-                        
-                        for (size_t j = 0; j < file_count; j++) {
-                            upb_Status status;
-                            
-                            upb_Status_Clear(&status);
-                            if (!upb_DefPool_AddFile(pool, files[j], &status)) {
-                                elog(WARNING, "Failed to add file to DefPool: %s", upb_Status_ErrorMessage(&status));
-                            }
-                        }
-                    } else {
-                        elog(WARNING, "Failed to parse FileDescriptorSet");
-                    }
-                    upb_Arena_Free(arena);
-                } else {
-                    elog(WARNING, "Failed to create arena for schema loading");
-                }
+            upb_Status_Clear(&status);
+            if (!upb_DefPool_AddFile(pool, files[j], &status)) {
+                elog(WARNING, "Failed to add file to DefPool: %s", upb_Status_ErrorMessage(&status));
             }
         }
+        upb_Arena_Free(arena);
     }
     
     SPI_finish();
