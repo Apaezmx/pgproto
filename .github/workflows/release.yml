@@ -175,7 +175,7 @@ jobs:
           mingw-w64-x86_64-postgresql
     - name: Build
       run: |
-        make CFLAGS="-std=c99 -Wno-declaration-after-statement -Wno-error -Dsigsetjmp(buf,mask)=setjmp(buf) -Dsiglongjmp(buf,val)=longjmp(buf,val)"
+        make CFLAGS="-std=c99 -Wno-declaration-after-statement -Wno-error \"-Dsigsetjmp(buf,mask)=setjmp(buf)\" \"-Dsiglongjmp(buf,val)=longjmp(buf,val)\""
       shell: msys2 {0}
     - name: Package Binary
       run: |
