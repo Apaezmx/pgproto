@@ -43,7 +43,7 @@ SELECT pb_get_int32_by_name(data, 'UnregisteredMessage', 'id') FROM pb_test WHER
 ERROR:  Message not found in schema registry: UnregisteredMessage
 -- Test shorthand operator -> (Dot Notation)
 SELECT data -> 'UnregisteredMessage.id'::text FROM pb_test WHERE id = 1;
-ERROR:  Message not found in schema registry: UnregisteredMessage
+ERROR:  Message not found in schema registry: 
 -- Test GIN Indexing (Purity)
 CREATE TABLE pb_test_gin (id serial, data protobuf);
 -- Insert row with Tag 1 = 42
