@@ -16,6 +16,7 @@
 
 #include "third_party/upb/upb/reflection/def.h"
 #include "third_party/upb/upb/reflection/descriptor_bootstrap.h"
+#include "third_party/upb/upb/wire/decode.h"
 
 #include <ctype.h>
 #include <stdlib.h>
