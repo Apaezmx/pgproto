@@ -5,7 +5,7 @@ UPB_OBJS = $(patsubst %.c,%.o,$(shell find third_party/protobuf/upb -name "*.c" 
            third_party/protobuf/upb/reflection/stage0/google/protobuf/descriptor.upb.o
 
 OBJS = src/pgproto.o src/io.o src/registry.o src/navigation.o src/gin.o src/json.o src/mutation.o $(UPB_OBJS) third_party/protobuf/third_party/utf8_range/utf8_range.o
-PG_CPPFLAGS = -I. -Ithird_party/protobuf -Ithird_party/protobuf/upb/reflection/stage0 -Ithird_party/protobuf/third_party/utf8_range -DUPB_BOOTSTRAP_STAGE=0
+PG_CPPFLAGS = -std=c99 -I. -Ithird_party/protobuf -Ithird_party/protobuf/upb/reflection/stage0 -Ithird_party/protobuf/third_party/utf8_range -DUPB_BOOTSTRAP_STAGE=0
 
 
 
