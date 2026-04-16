@@ -17,7 +17,7 @@ pgproto_LoadAllSchemasFromDb(upb_DefPool *pool)
     TupleDesc tupdesc = SPI_tuptable->tupdesc;
     SPITupleTable *tuptable = SPI_tuptable;
     
-    for (int i = 0; i < tuptable->numvals; i++) {
+    for (int i = 0; i < SPI_processed; i++) {
         HeapTuple tuple = tuptable->vals[i];
         bool is_null;
         Datum data_datum = SPI_getbinval(tuple, tupdesc, 1, &is_null);
