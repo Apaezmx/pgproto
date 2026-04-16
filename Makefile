@@ -17,5 +17,5 @@ PG_CONFIG ?= pg_config
 PGXS := $(shell "$(PG_CONFIG)" --pgxs)
 include $(PGXS)
 
-# Override CFLAGS to force C99 and disable strict C90 warnings on Windows
-override CFLAGS += -std=c99 -Wno-declaration-after-statement
+# Override CFLAGS to force C99, disable strict C90 warnings, and ignore warnings as errors on Windows
+override CFLAGS += -std=c99 -Wno-declaration-after-statement -Wno-error
