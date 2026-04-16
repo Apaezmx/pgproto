@@ -81,6 +81,17 @@ PG_FUNCTION_INFO_V1(protobuf_contains);
 Datum
 protobuf_contains(PG_FUNCTION_ARGS)
 {
+    /* 
+     * This function checks if the 'base' protobuf contains all fields present in the 'query' protobuf.
+     * It iterates over all fields in 'query' and for each field, it scans the 'base'
+     * to find a matching field and value.
+     * 
+     * NOTE: This is an O(N*M) operation where N is query size and M is base size.
+     * For large messages, this could be a performance bottleneck.
+     * 
+     * NOTE: It uses manual skipping instead of skip_field() in some places to avoid
+     * function call overhead in hot loops, or because it was written before skip_field was available.
+     */
     ProtobufData *base = (ProtobufData *) PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
     ProtobufData *query = (ProtobufData *) PG_DETOAST_DATUM(PG_GETARG_DATUM(1));
     const char *q_ptr = query->data;

@@ -157,6 +157,13 @@ PG_FUNCTION_INFO_V1(pb_insert);
 Datum
 pb_insert(PG_FUNCTION_ARGS)
 {
+    /*
+     * Inserts an element into a repeated field (array) or map field.
+     * Expects a path of length 3: [message_name, field_name, index_or_key].
+     * 
+     * For arrays, the 3rd element is the 0-based index where to insert.
+     * For maps, the 3rd element is the string key to insert.
+     */
     ProtobufData *data;
     ArrayType *path_array;
     text *new_val_text;

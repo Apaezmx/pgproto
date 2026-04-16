@@ -3,6 +3,13 @@
 void
 pgproto_LoadAllSchemasFromDb(upb_DefPool *pool)
 {
+    /*
+     * Loads all registered protobuf schemas from the 'pb_schemas' table
+     * into the provided upb_DefPool. This is called during extension initialization
+     * and whenever a new schema is registered to keep the in-memory pool up to date.
+     * 
+     * It uses Server Programming Interface (SPI) to query the database.
+     */
     int ret;
     
     SPI_connect();
