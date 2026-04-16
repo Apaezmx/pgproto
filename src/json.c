@@ -44,7 +44,7 @@ pb_to_json(PG_FUNCTION_ARGS)
     upb_DecodeStatus status = upb_Decode(pb_data->data, data_len, msg, mini_table, NULL, 0, arena);
     if (status != kUpb_DecodeStatus_Ok) {
         upb_Arena_Free(arena);
-        elog(ERROR, "Failed to decode protobuf data (status %d)", status);
+        elog(ERROR, "Failed to decode protobuf data: %s", upb_DecodeStatus_String(status));
     }
     
     // 3. Convert to JSON

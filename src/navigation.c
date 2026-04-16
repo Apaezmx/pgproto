@@ -225,9 +225,13 @@ pb_get_int32_by_name_dot(PG_FUNCTION_ARGS)
         elog(ERROR, "Path must be in format 'Message.Field'");
     }
     
-    *dot = '\0';
-    char *msg_name = path;
-    char *field_name = dot + 1;
+    size_t msg_len = dot - path;
+    char *msg_name = palloc(msg_len + 1);
+    memcpy(msg_name, path, msg_len);
+    msg_name[msg_len] = '\0';
+
+    char *field_name = pstrdup(dot + 1);
+    pfree(path);
 
     const upb_MessageDef *msg_def;
     const upb_FieldDef *field_def;

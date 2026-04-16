@@ -14,10 +14,9 @@
 #include "utils/array.h"
 #include "utils/lsyscache.h"
 
-#include "third_party/upb/upb/reflection/def_pool.h"
-#include "third_party/upb/upb/reflection/message_def.h"
-#include "third_party/upb/upb/reflection/field_def.h"
-#include "google/protobuf/descriptor.upb.h"
+#include "third_party/upb/upb/reflection/def.h"
+#include "third_party/upb/upb/reflection/descriptor_bootstrap.h"
+#include "third_party/upb/upb/wire/decode.h"
 
 #include <ctype.h>
 #include <stdlib.h>

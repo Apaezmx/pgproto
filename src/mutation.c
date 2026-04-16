@@ -79,7 +79,7 @@ pb_set(PG_FUNCTION_ARGS)
     status = upb_Decode(buf, size, msg, mini_table, NULL, 0, arena);
     if (status != kUpb_DecodeStatus_Ok) {
         upb_Arena_Free(arena);
-        elog(ERROR, "Failed to decode protobuf message: %d", status);
+        elog(ERROR, "Failed to decode protobuf message: %s", upb_DecodeStatus_String(status));
     }
 
     {
@@ -221,7 +221,7 @@ pb_insert(PG_FUNCTION_ARGS)
     status = upb_Decode(buf, size, msg, mini_table, NULL, 0, arena);
     if (status != kUpb_DecodeStatus_Ok) {
         upb_Arena_Free(arena);
-        elog(ERROR, "Failed to decode protobuf message: %d", status);
+        elog(ERROR, "Failed to decode protobuf message: %s", upb_DecodeStatus_String(status));
     }
 
     {
@@ -411,7 +411,7 @@ pb_delete(PG_FUNCTION_ARGS)
     status = upb_Decode(buf, size, msg, mini_table, NULL, 0, arena);
     if (status != kUpb_DecodeStatus_Ok) {
         upb_Arena_Free(arena);
-        elog(ERROR, "Failed to decode protobuf message: %d", status);
+        elog(ERROR, "Failed to decode protobuf message: %s", upb_DecodeStatus_String(status));
     }
 
     {
