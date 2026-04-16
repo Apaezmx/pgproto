@@ -15,7 +15,7 @@ pb_to_json(PG_FUNCTION_ARGS)
     // 1. Resolve message definition
     if (!s_def_pool) {
         s_def_pool = upb_DefPool_New();
-        load_all_schemas_from_db(s_def_pool);
+        pgproto_LoadAllSchemasFromDb(s_def_pool);
     }
     
     const upb_MessageDef *msg_def = upb_DefPool_FindMessageByName(s_def_pool, message_type_str);

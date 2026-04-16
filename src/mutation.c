@@ -55,7 +55,7 @@ pb_set(PG_FUNCTION_ARGS)
     if (s_def_pool == NULL) {
         s_def_pool = upb_DefPool_New();
         if (s_def_pool) {
-            load_all_schemas_from_db(s_def_pool);
+            pgproto_LoadAllSchemasFromDb(s_def_pool);
         }
     }
 
@@ -197,7 +197,7 @@ pb_insert(PG_FUNCTION_ARGS)
     if (s_def_pool == NULL) {
         s_def_pool = upb_DefPool_New();
         if (s_def_pool) {
-            load_all_schemas_from_db(s_def_pool);
+            pgproto_LoadAllSchemasFromDb(s_def_pool);
         }
     }
 
@@ -244,38 +244,37 @@ pb_insert(PG_FUNCTION_ARGS)
             upb_MutableMessageValue mut_val = upb_Message_Mutable(msg, field_def, arena);
             upb_Array *arr = mut_val.array;
             size_t arr_size = upb_Array_Size(arr);
+            upb_MessageValue new_elem_val;
+            char *new_val_str = text_to_cstring(new_val_text);
+            upb_CType ctype = upb_FieldDef_CType(field_def);
 
             if (index < 0 || index > arr_size) {
                 elog(ERROR, "Array index out of bounds: %d, size: %zu", index, arr_size);
             }
 
-            if (upb_Array_Insert(arr, index, 1, arena)) {
-                upb_MessageValue new_elem_val;
-                char *new_val_str = text_to_cstring(new_val_text);
-                upb_CType ctype = upb_FieldDef_CType(field_def);
-
-                // Parse value based on type
-                switch (ctype) {
-                    case kUpb_CType_Int32:
-                        new_elem_val.int32_val = atoi(new_val_str);
-                        break;
-                    case kUpb_CType_String:
-                        {
-                            char *arena_str = upb_Arena_Malloc(arena, strlen(new_val_str) + 1);
-                            strcpy(arena_str, new_val_str);
-                            new_elem_val.str_val.data = arena_str;
-                            new_elem_val.str_val.size = strlen(new_val_str);
-                        }
-                        break;
-                    // Add more types as needed
-                    default:
-                        elog(ERROR, "Unsupported type for array insertion: %d", ctype);
-                }
-                upb_Array_Set(arr, index, new_elem_val);
-                pfree(new_val_str);
-            } else {
+            if (!upb_Array_Insert(arr, index, 1, arena)) {
                 elog(ERROR, "Failed to insert into array");
             }
+
+            // Parse value based on type
+            switch (ctype) {
+                case kUpb_CType_Int32:
+                    new_elem_val.int32_val = atoi(new_val_str);
+                    break;
+                case kUpb_CType_String:
+                    {
+                        char *arena_str = upb_Arena_Malloc(arena, strlen(new_val_str) + 1);
+                        strcpy(arena_str, new_val_str);
+                        new_elem_val.str_val.data = arena_str;
+                        new_elem_val.str_val.size = strlen(new_val_str);
+                    }
+                    break;
+                // Add more types as needed
+                default:
+                    elog(ERROR, "Unsupported type for array insertion: %d", ctype);
+            }
+            upb_Array_Set(arr, index, new_elem_val);
+            pfree(new_val_str);
         } else if (upb_FieldDef_IsMap(field_def)) {
             // Map Insertion
             upb_MutableMessageValue mut_val = upb_Message_Mutable(msg, field_def, arena);
@@ -388,7 +387,7 @@ pb_delete(PG_FUNCTION_ARGS)
     if (s_def_pool == NULL) {
         s_def_pool = upb_DefPool_New();
         if (s_def_pool) {
-            load_all_schemas_from_db(s_def_pool);
+            pgproto_LoadAllSchemasFromDb(s_def_pool);
         }
     }
 

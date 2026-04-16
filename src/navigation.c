@@ -164,7 +164,7 @@ pb_get_int32_by_name(PG_FUNCTION_ARGS)
     if (s_def_pool == NULL) {
         s_def_pool = upb_DefPool_New();
         if (s_def_pool) {
-            load_all_schemas_from_db(s_def_pool);
+            pgproto_LoadAllSchemasFromDb(s_def_pool);
         }
     }
 
@@ -239,7 +239,7 @@ pb_get_int32_by_name_dot(PG_FUNCTION_ARGS)
     if (s_def_pool == NULL) {
         s_def_pool = upb_DefPool_New();
         if (s_def_pool) {
-            load_all_schemas_from_db(s_def_pool);
+            pgproto_LoadAllSchemasFromDb(s_def_pool);
         }
     }
 
@@ -313,7 +313,7 @@ pb_get_int32_by_path(PG_FUNCTION_ARGS)
     if (s_def_pool == NULL) {
         s_def_pool = upb_DefPool_New();
         if (s_def_pool) {
-            load_all_schemas_from_db(s_def_pool);
+            pgproto_LoadAllSchemasFromDb(s_def_pool);
         }
     }
 

@@ -18,8 +18,13 @@ In benchmarks comparing 100,000 serialized `example.Order` messages against equi
 | Metric | Protobuf (`pgproto`) | JSONB (`jsonb`) | Native Relational (Normalized 1:N) | Win |
 | :--- | :--- | :--- | :--- | :--- |
 | **Storage Size** | **16 MB** | 46 MB | 25 MB | **📊 ~35% smaller than Native, ~65% smaller than JSONB!** |
-| **Single-Row Lookup Latency (Indexed)** | 5.9 ms | 8.1 ms | **3.5 ms** | Native is fastest for flat lookups, but `pgproto` is close! |
-| **Full Document Retrieval Latency** | **5.9 ms** | 8.1 ms | 33.1 ms | **📈 ~5x faster than Native JOINs for full object fetch!** |
+| **Single-Row Lookup Latency (Indexed)** | 4.2 ms | 12.4 ms | **3.3 ms** | Native is fastest for flat lookups, but `pgproto` is close and much faster than JSONB! |
+| **Full Document Retrieval Latency** | **4.2 ms** | 12.4 ms | 32.1 ms | **📈 ~7x faster than Native JOINs for full object fetch!** |
+
+### 📈 Large Payload Aggregation Benchmark (1KB)
+In separate benchmarks querying 100,000 rows with large 1KB payloads (comparing extraction vs JSONB):
+*   **Field at Beginning (Tag 1)**: `pgproto` is **~35% faster** than `jsonb` (17.6 ms vs 27.2 ms).
+*   **Field at End (Tag 3, requires skipping 1KB)**: `pgproto` is **~30% faster** than `jsonb` (17.1 ms vs 24.3 ms).
 
 > [!NOTE]
 > `pgproto` combines the storage efficiency of binary compaction with the query flexibility of JSONB, without the overhead of heavy JOINs or text parsing!
@@ -227,12 +232,8 @@ See [example/README.md](./example/README.md) for more details.
 
 You can run both coverage capture and memory leak analysis directly inside your running Docker workspace.
 
-#### 1. 🏗️ Prerequisites (Install Tools)
-Install `lcov` and `valgrind` inside the running container as `root`:
-```bash
-docker-compose -f example/docker-compose.yml exec -u root db apt-get update
-docker-compose -f example/docker-compose.yml exec -u root db apt-get install -y lcov valgrind
-```
+#### 1. 🏗️ Prerequisites
+`lcov` and `valgrind` are now pre-installed in the Docker image! You can skip manual installation and proceed directly to running tests.
 
 #### 2. 🧪 Coverage Run
 Recompile the extension with profiling flags and capture data:
@@ -245,16 +246,29 @@ docker-compose -f example/docker-compose.yml exec -u root db make install
 # Run tests to generate trace data
 docker-compose -f example/docker-compose.yml exec -u postgres db make installcheck
 
-# Capture output (ignores negative hit counter overflows)
-docker-compose -f example/docker-compose.yml exec -u postgres db lcov --capture --directory . --output-file coverage.info --ignore-errors negative,inconsistent
+# Capture output (ignores negative hit counter overflows and version mismatches)
+docker-compose -f example/docker-compose.yml exec -u postgres db lcov --capture --directory . --output-file coverage.info --ignore-errors negative,inconsistent,version,gcov
+
+# Filter out third_party dependencies to see actual extension coverage
+docker-compose -f example/docker-compose.yml exec -u postgres db lcov --remove coverage.info '/workspace/third_party/*' --output-file coverage_filtered.info
+
+# View summary
+docker-compose -f example/docker-compose.yml exec -u postgres db lcov --summary coverage_filtered.info
 ```
+> [!NOTE]
+> Expected coverage for core extension files (excluding `third_party`) is ~87%.
+> If you encounter permission issues when writing `coverage.info` or `regression.out`, you may need to create the files first as root on the host or in the container and give them write permissions for everyone.
+> For example: `touch coverage.info && chmod a+rw coverage.info`
+
 
 #### 3. 🧠 Memory Leak Analysis
 Run showcase queries through `valgrind` to verify memory safety:
 ```bash
 docker-compose -f example/docker-compose.yml exec -u postgres db valgrind --leak-check=full --log-file=/workspace/valgrind.log psql -U postgres -d pgproto_showcase -f /workspace/example/valgrind_full.sql
 ```
-Check `valgrind.log` for memory leaks reports!
+> [!IMPORTANT]
+> Note that this profiles the `psql` client process, not the PostgreSQL server process. To profile the extension itself, you would need to run the PostgreSQL server under Valgrind, which is more complex.
+
 
 ---
 
