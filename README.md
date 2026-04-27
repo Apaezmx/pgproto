@@ -26,10 +26,15 @@ In separate benchmarks querying 100,000 rows with large 1KB payloads (comparing 
 *   **Field at Beginning (Tag 1)**: `pgproto` is **~35% faster** than `jsonb` (17.6 ms vs 27.2 ms).
 *   **Field at End (Tag 3, requires skipping 1KB)**: `pgproto` is **~30% faster** than `jsonb` (17.1 ms vs 24.3 ms).
 
+### 📊 Concurrent Load Benchmarks
+To simulate production load, we ran queries in parallel to measure average latency:
+*   **10 Parallel Workers**: `pgproto` average latency was **3.78 ms** vs `jsonb` **6.59 ms** (~42% faster).
+*   **100 Parallel Workers**: `pgproto` average latency was **5.21 ms** vs `jsonb` **10.49 ms** (~50% faster).
+
 > [!NOTE]
 > `pgproto` combines the storage efficiency of binary compaction with the query flexibility of JSONB, without the overhead of heavy JOINs or text parsing!
 
-*Benchmarks ran using un-optimized debug binaries on standard Linux environments.*
+*Benchmarks ran using optimized release binaries (-O2) in an isolated Docker environment.*
 
 ---
 
