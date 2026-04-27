@@ -14,9 +14,9 @@
 #include "utils/array.h"
 #include "utils/lsyscache.h"
 
-#include "third_party/upb/upb/reflection/def.h"
-#include "third_party/upb/upb/reflection/descriptor_bootstrap.h"
-#include "third_party/upb/upb/wire/decode.h"
+#include "upb/reflection/def.h"
+#include "upb/reflection/descriptor_bootstrap.h"
+#include "upb/wire/decode.h"
 
 #include <ctype.h>
 #include <stdlib.h>
