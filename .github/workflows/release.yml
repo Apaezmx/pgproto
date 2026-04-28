@@ -20,17 +20,8 @@ jobs:
     env:
       PG_CONFIG: /usr/lib/postgresql/${{ matrix.pg_version }}/bin/pg_config
 
-
     steps:
     - uses: actions/checkout@v3
-      with:
-        submodules: true
-        lfs: false
-
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y build-essential libprotobuf-c-dev protobuf-c-compiler
 
     - name: Setup PostgreSQL ${{ matrix.pg_version }}
       run: |
@@ -64,8 +55,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
-      with:
-        submodules: recursive
 
     - name: Set Version
       run: |
@@ -75,7 +64,6 @@ jobs:
     - name: Package Source Bundle for PGXN
       run: |
         mkdir -p dist/pgproto-${{ env.VERSION }}
-        # Copy source files
         cp -R src/ dist/pgproto-${{ env.VERSION }}/
         cp -R sql/ dist/pgproto-${{ env.VERSION }}/
         cp Makefile dist/pgproto-${{ env.VERSION }}/
@@ -83,10 +71,6 @@ jobs:
         cp META.json dist/pgproto-${{ env.VERSION }}/
         cp LICENSE dist/pgproto-${{ env.VERSION }}/
         cp README.md dist/pgproto-${{ env.VERSION }}/
-        cp -R third_party/ dist/pgproto-${{ env.VERSION }}/
-        # Debug: check if files are there
-        ls -la dist/pgproto-${{ env.VERSION }}/third_party/protobuf/upb/reflection/def_pool.h || echo "FILE NOT FOUND"
-        # Zip it
         cd dist && zip -r ../pgproto-${{ env.VERSION }}.zip pgproto-${{ env.VERSION }}/
 
     - name: Upload Source Release Asset
@@ -122,10 +106,8 @@ jobs:
         sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
         wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
         sudo apt-get update
-        sudo apt-get install -y postgresql-server-dev-18 libprotobuf-c-dev protobuf-c-compiler python3-pip
+        sudo apt-get install -y postgresql-server-dev-18 python3-pip
         sudo pip3 install pgxnclient
-    - name: List files
-      run: ls -la
     - name: Test PGXN Install
       run: |
         sudo pgxn install ./pgproto-${{ env.VERSION }}.zip
@@ -135,8 +117,6 @@ jobs:
     needs: build-binaries
     steps:
     - uses: actions/checkout@v3
-      with:
-        submodules: true
     - name: Log in to GHCR
       uses: docker/login-action@v2
       with:
@@ -161,8 +141,6 @@ jobs:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v3
-      with:
-        submodules: true
     - name: Setup MSYS2
       uses: msys2/setup-msys2@v2
       with:
@@ -171,7 +149,6 @@ jobs:
           make
           zip
           mingw-w64-x86_64-gcc
-          mingw-w64-x86_64-protobuf-c
           mingw-w64-x86_64-postgresql
     - name: Build
       run: |

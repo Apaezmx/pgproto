@@ -420,7 +420,7 @@ SELECT pb_insert('\x'::protobuf, ARRAY['Outer', 'nonexistent', '0'], '100');
 ERROR:  Field nonexistent not found in message Outer
 -- 7. Test pb_insert error: Not a repeated or map field
 SELECT pb_insert('\x'::protobuf, ARRAY['Outer', 'inner', '0'], '100');
-ERROR:  Field not repeated or map
+ERROR:  Field inner is not a repeated or map field
 -- 8. Test pb_delete for array field 'scores' in Outer
 SELECT pb_to_json(pb_delete(pb_insert(pb_insert('\x'::protobuf, ARRAY['Outer', 'scores', '0'], '100'), ARRAY['Outer', 'scores', '1'], '200'), ARRAY['Outer', 'scores', '0']), 'Outer');
  pb_to_json 
