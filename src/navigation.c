@@ -6,14 +6,6 @@ PG_FUNCTION_INFO_V1(pb_get_int32);
 
 /**
  * pb_get_int32: Extracts an int32 value from a Protobuf message by its tag number.
- * 
- * Inputs:
- * - data (protobuf): The Protobuf binary data.
- * - target_tag (int32): The tag number to look for.
- * 
- * Summary:
- * Scans the Protobuf wire format sequentially. When the tag is found, it decodes
- * the Varint value. If the tag is not found, returns NULL.
  */
 Datum
 pb_get_int32(PG_FUNCTION_ARGS)
@@ -42,11 +34,6 @@ pb_get_int32(PG_FUNCTION_ARGS)
 }
 
 PG_FUNCTION_INFO_V1(protobuf_contains);
-
-/**
- * protobuf_contains: Implementation of the @> operator.
- * Checks if the 'base' protobuf contains all tag-value pairs present in 'query'.
- */
 Datum
 protobuf_contains(PG_FUNCTION_ARGS)
 {
@@ -91,10 +78,6 @@ protobuf_contains(PG_FUNCTION_ARGS)
 }
 
 PG_FUNCTION_INFO_V1(pb_get_int32_by_name);
-
-/**
- * pb_get_int32_by_name: Extracts an int32 value by message and field name.
- */
 Datum
 pb_get_int32_by_name(PG_FUNCTION_ARGS)
 {
@@ -120,8 +103,6 @@ pb_get_int32_by_name(PG_FUNCTION_ARGS)
     }
     field_number = lookup.number;
 
-    pfree(msg_name); pfree(field_name);
-
     ptr = data->data;
     end = (const char *) data + VARSIZE(data);
 
@@ -133,6 +114,7 @@ pb_get_int32_by_name(PG_FUNCTION_ARGS)
         if (field_num == (int)field_number) {
             if (wire_type == PB_WIRE_VARINT) {
                 uint64 val = decode_varint(&ptr, end);
+                pfree(msg_name); pfree(field_name);
                 PG_RETURN_INT32((int32) val);
             } else {
                 elog(ERROR, "Expected varint wire type for field %s, got %d", field_name, wire_type);
@@ -140,14 +122,11 @@ pb_get_int32_by_name(PG_FUNCTION_ARGS)
         }
         skip_field(wire_type, &ptr, end);
     }
+    pfree(msg_name); pfree(field_name);
     PG_RETURN_NULL();
 }
 
 PG_FUNCTION_INFO_V1(pb_get_int32_by_name_dot);
-
-/**
- * pb_get_int32_by_name_dot: Extracts an int32 value using dot notation (e.g., "Message.Field").
- */
 Datum
 pb_get_int32_by_name_dot(PG_FUNCTION_ARGS)
 {
@@ -155,8 +134,8 @@ pb_get_int32_by_name_dot(PG_FUNCTION_ARGS)
     text *path_text = PG_GETARG_TEXT_P(1);
     char *path = text_to_cstring(path_text);
     
-    char *dot = strchr(path, '.');
-    if (!dot) { pfree(path); elog(ERROR, "Path must be in format 'Message.Field'"); }
+    char *dot = strrchr(path, '.');
+    if (!dot) { pfree(path); elog(ERROR, "Path must be in format 'Package.Message.Field' or 'Message.Field'"); }
     
     *dot = '\0';
     char *msg_name = path;
@@ -187,7 +166,6 @@ pb_get_int32_by_name_dot(PG_FUNCTION_ARGS)
                 uint64 val = decode_varint(&ptr, end);
                 pfree(path); PG_RETURN_INT32((int32) val);
             } else {
-                pfree(path);
                 elog(ERROR, "Expected varint wire type for field %s, got %d", field_name, wire_type);
             }
         }
@@ -196,21 +174,12 @@ pb_get_int32_by_name_dot(PG_FUNCTION_ARGS)
     pfree(path); PG_RETURN_NULL();
 }
 
-PG_FUNCTION_INFO_V1(pb_get_int32_by_path);
-
 /**
- * pb_get_int32_by_path: Implementation of the #> operator for path navigation.
- * 
- * Inputs:
- * - data (protobuf)
- * - path (text[]): E.g., ARRAY['Outer', 'inner', 'id'] or ARRAY['Outer', 'scores', '0']
- * 
- * Summary:
- * Iteratively resolves each path element. If it's a message, it nests the parser
- * into the submessage's length-delimited blob. Supports array indexing and map key lookups.
+ * pb_get_by_path_common: Unified internal helper for path-based extraction.
+ * Supports both integer (#>) and text (#>>) output formats.
  */
-Datum
-pb_get_int32_by_path(PG_FUNCTION_ARGS)
+static Datum
+pb_get_by_path_common(PG_FUNCTION_ARGS, bool as_text)
 {
     ProtobufData *data = (ProtobufData *) PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
     ArrayType *path_array = PG_GETARG_ARRAYTYPE_P(1);
@@ -261,26 +230,32 @@ pb_get_int32_by_path(PG_FUNCTION_ARGS)
                     if (wire_type == PB_WIRE_LENGTH_DELIMITED) {
                         uint64 len = decode_varint(&ptr, end);
                         const char *entry_ptr = ptr; const char *entry_end = ptr + len; ptr += len; 
-                        bool key_matched = false; uint64 val = 0; bool val_found = false;
+                        bool key_matched = false; uint64 val = 0; char *val_str = NULL; bool val_found = false;
                         while (entry_ptr < entry_end) {
                             uint64 entry_key = decode_varint(&entry_ptr, entry_end);
-                            int entry_num = (int)(entry_key >> 3); int entry_wire = (int)(entry_key & 0x07);
-                            if (entry_num == 1) { // key
-                                if (entry_wire == 2) { // string
+                            int entry_num = (int)(entry_key >> PB_FIELD_NUM_SHIFT);
+                            int entry_wire = (int)(entry_key & PB_WIRE_TYPE_MASK);
+                            if (entry_num == PB_MAP_ENTRY_KEY) { // key
+                                if (entry_wire == PB_WIRE_LENGTH_DELIMITED) { // string
                                     uint64 key_len = decode_varint(&entry_ptr, entry_end);
                                     if (key_len == strlen(map_key) && memcmp(entry_ptr, map_key, key_len) == 0) key_matched = true;
                                     entry_ptr += key_len;
-                                } else if (entry_wire == 0) { if (decode_varint(&entry_ptr, entry_end) == atoi(map_key)) key_matched = true; }
-                            } else if (entry_num == 2) { // value
-                                if (entry_wire == 0) { val = decode_varint(&entry_ptr, entry_end); val_found = true; }
-                                else skip_field(entry_wire, &entry_ptr, entry_end);
+                                } else if (entry_wire == PB_WIRE_VARINT) { if (decode_varint(&entry_ptr, entry_end) == atoi(map_key)) key_matched = true; }
+                            } else if (entry_num == PB_MAP_ENTRY_VALUE) { // value
+                                if (entry_wire == PB_WIRE_VARINT && !as_text) { val = decode_varint(&entry_ptr, entry_end); val_found = true; }
+                                else if (entry_wire == PB_WIRE_LENGTH_DELIMITED && as_text) {
+                                    uint64 vlen = decode_varint(&entry_ptr, entry_end);
+                                    val_str = palloc(vlen + 1); memcpy(val_str, entry_ptr, vlen); val_str[vlen] = '\0';
+                                    entry_ptr += vlen; val_found = true;
+                                } else skip_field(entry_wire, &entry_ptr, entry_end);
                             } else skip_field(entry_wire, &entry_ptr, entry_end);
                         }
                         if (key_matched && val_found) {
                             found = true;
                             if (i == nelems - 1) {
                                 pfree(field_name); if (map_key) pfree(map_key);
-                                PG_RETURN_INT32((int32) val);
+                                if (as_text) PG_RETURN_TEXT_P(cstring_to_text(val_str));
+                                else PG_RETURN_INT32((int32) val);
                             }
                         }
                     }
@@ -291,7 +266,11 @@ pb_get_int32_by_path(PG_FUNCTION_ARGS)
                         while (ptr < packed_end && current_idx < target_index) { decode_varint(&ptr, packed_end); current_idx++; }
                         if (ptr < packed_end) {
                             found = true; uint64 val = decode_varint(&ptr, packed_end);
-                            if (i == nelems - 1) { pfree(field_name); PG_RETURN_INT32((int32) val); }
+                            if (i == nelems - 1) { 
+                                pfree(field_name); 
+                                if (as_text) { char buf[32]; sprintf(buf, "%ld", (long)val); PG_RETURN_TEXT_P(cstring_to_text(buf)); }
+                                else PG_RETURN_INT32((int32) val);
+                            }
                         }
                         ptr = packed_end; break;
                     } else {
@@ -304,17 +283,25 @@ pb_get_int32_by_path(PG_FUNCTION_ARGS)
                                 break;
                             } else {
                                 uint64 val = decode_varint(&ptr, end);
-                                if (i == nelems - 1) { pfree(field_name); PG_RETURN_INT32((int32) val); }
+                                if (i == nelems - 1) { 
+                                    pfree(field_name); 
+                                    if (as_text) { char buf[32]; sprintf(buf, "%ld", (long)val); PG_RETURN_TEXT_P(cstring_to_text(buf)); }
+                                    else PG_RETURN_INT32((int32) val);
+                                }
                             }
                         } else { skip_field(wire_type, &ptr, end); current_idx++; }
                     }
                 } else {
                     found = true;
                     if (i == nelems - 1) {
-                        if (wire_type == PB_WIRE_VARINT) {
+                        if (wire_type == PB_WIRE_VARINT && !as_text) {
                             uint64 val = decode_varint(&ptr, end);
                             pfree(field_name); PG_RETURN_INT32((int32) val);
-                        } else elog(ERROR, "Expected varint wire type for field %s, got %d", field_name, wire_type);
+                        } else if (wire_type == PB_WIRE_LENGTH_DELIMITED && as_text) {
+                            uint64 len = decode_varint(&ptr, end);
+                            char *val_str = palloc(len + 1); memcpy(val_str, ptr, len); val_str[len] = '\0';
+                            pfree(field_name); PG_RETURN_TEXT_P(cstring_to_text(val_str));
+                        } else elog(ERROR, "Expected %s wire type for field %s, got %d", as_text ? "string" : "varint", field_name, wire_type);
                     } else {
                         if (wire_type == PB_WIRE_LENGTH_DELIMITED) {
                             uint64 len = decode_varint(&ptr, end);
@@ -327,8 +314,25 @@ pb_get_int32_by_path(PG_FUNCTION_ARGS)
                 }
             } else skip_field(wire_type, &ptr, end);
         }
-        if (map_key) pfree(map_key); pfree(field_name);
+        if (map_key) {
+            pfree(map_key);
+        }
+        pfree(field_name);
         if (!found) PG_RETURN_NULL();
     }
     PG_RETURN_NULL();
+}
+
+PG_FUNCTION_INFO_V1(pb_get_int32_by_path);
+Datum
+pb_get_int32_by_path(PG_FUNCTION_ARGS)
+{
+    return pb_get_by_path_common(fcinfo, false);
+}
+
+PG_FUNCTION_INFO_V1(pb_get_text_by_path);
+Datum
+pb_get_text_by_path(PG_FUNCTION_ARGS)
+{
+    return pb_get_by_path_common(fcinfo, true);
 }

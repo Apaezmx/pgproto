@@ -5,26 +5,31 @@ This directory contains the pure C source code for the `pgproto` PostgreSQL exte
 ## 🏗️ Architecture
 The extension is implemented in pure C99 without any external Protobuf libraries (like `upb` or C++ Protobuf). It uses an on-the-fly binary descriptor parser to resolve field metadata directly from `FileDescriptorSet` blobs stored in the database.
 
+The codebase follows a **DRY (Don't Repeat Yourself)** architecture, leveraging internal unified helpers for path traversal, tag filtering, and value encoding to ensure robustness and memory safety.
+
 ## 📂 File Distribution
 
 ### 🛠️ Core & Entry
-*   **[`pgproto.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/pgproto.c)**: The main entry point for the extension. Contains module magic (`PG_MODULE_MAGIC`) and boilerplate.
-*   **[`pgproto.h`](file:///usr/local/google/home/paezmartinez/pgproto/src/pgproto.h)**: The central internal header. Defines the Protobuf wire format types, `PbFieldLookup` structures, and shared inline functions for high-performance varint decoding and encoding.
+*   **[`pgproto.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/pgproto.c)**: The main entry point for the extension.
+*   **[`pgproto.h`](file:///usr/local/google/home/paezmartinez/pgproto/src/pgproto.h)**: The central internal header. Defines Protobuf wire format types and shared inline functions for varint decoding. Supports conditional inclusion for isolated unit testing via the `PGPROTO_UNIT_TEST` macro.
 
 ### 📥 Type Handler
-*   **[`io.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/io.c)**: Implements standard PostgreSQL Type Input/Output handlers. Manages the hex-encoded string representation used in SQL queries.
+*   **[`io.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/io.c)**: Implements PostgreSQL Type Input/Output handlers for hex-encoded Protobuf blobs.
 
 ### 📜 Registry
-*   **[`registry.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/registry.c)**: The core schema engine. Implements a custom Protobuf binary parser that traverses descriptor blobs to resolve field names to tag numbers and types. Manages the session-level schema cache.
+*   **[`registry.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/registry.c)**: The schema engine. Implements a binary descriptor parser to resolve field names to tags.
 
 ### 🧭 Navigation
-*   **[`navigation.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/navigation.c)**: The "hot-path" querying engine. Implements sequential wire-format scanning to perform nested field extraction, array indexing, and map key lookups without decoding the entire message.
+*   **[`navigation.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/navigation.c)**: The querying engine. Uses unified path traversal helpers to extract integers (`#>`) and text (`#>>`) from nested structures, maps, and arrays.
 
 ### ✏️ Mutation
-*   **[`mutation.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/mutation.c)**: Implements high-performance modification operations. Uses a "last-tag-wins" append strategy for updates and tag-filtering for deletions to maintain high speed and memory efficiency.
+*   **[`mutation.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/mutation.c)**: Implements modification operations (`pb_set`, `pb_insert`, `pb_delete`) with **automatic compaction** to prevent binary bloat.
 
 ### 📄 JSON Conversion
-*   **[`json.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/json.c)**: Implements dynamic Protobuf-to-JSON translation. Recursively decodes binary messages into human-readable JSON using metadata from the registry.
+*   **[`json.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/json.c)**: Implements dynamic Protobuf-to-JSON translation for human-readable display.
 
 ### 🔍 Indexing & GIN
-*   **[`gin.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/gin.c)**: Implements GIN index support. Extracts tag-value pairs from Protobuf blobs to enable blazing-fast indexed lookups (e.g., using the `@>` operator).
+*   **[`gin.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/gin.c)**: Implements GIN index support for blazing-fast containment queries (`@>`).
+
+## 🧪 Testing
+For isolated C unit tests and memory safety verification, see the root **[`tests/`](file:///usr/local/google/home/paezmartinez/pgproto/tests/)** directory.

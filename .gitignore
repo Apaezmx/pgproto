@@ -72,3 +72,9 @@ build.log
 regression.diffs
 dist/
 *.zip
+tests/common_test
+tests/registry_test
+tests/navigation_test
+tests/mutation_test
+tests/json_test
+tests/io_test

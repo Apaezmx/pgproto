@@ -1,6 +1,9 @@
 #ifndef PGPROTO_H
 #define PGPROTO_H
 
+#ifdef PGPROTO_UNIT_TEST
+#include "tests/postgres_mock.h"
+#else
 #include "postgres.h"
 #include "fmgr.h"
 #include "utils/builtins.h"
@@ -10,6 +13,7 @@
 #include "utils/array.h"
 #include "utils/lsyscache.h"
 #include "lib/stringinfo.h"
+#endif
 
 #include <ctype.h>
 #include <stdlib.h>
@@ -39,6 +43,27 @@ typedef enum {
 
 #define PB_WIRE_TYPE_MASK 0x07
 #define PB_FIELD_NUM_SHIFT 3
+#define PB_FIELD_TAG(num, wire) (((uint32_t)(num) << PB_FIELD_NUM_SHIFT) | (uint32_t)(wire))
+
+/* DescriptorProto Tags (from descriptor.proto) */
+#define PB_FILE_DESCRIPTOR_SET_FILE          1
+#define PB_FILE_DESCRIPTOR_PROTO_NAME        1
+#define PB_FILE_DESCRIPTOR_PROTO_PACKAGE     2
+#define PB_FILE_DESCRIPTOR_PROTO_MESSAGE_TYPE 4
+
+#define PB_DESCRIPTOR_PROTO_NAME             1
+#define PB_DESCRIPTOR_PROTO_FIELD            2
+#define PB_DESCRIPTOR_PROTO_NESTED_TYPE      3
+
+#define PB_FIELD_DESCRIPTOR_PROTO_NAME       1
+#define PB_FIELD_DESCRIPTOR_PROTO_NUMBER     3
+#define PB_FIELD_DESCRIPTOR_PROTO_LABEL      4
+#define PB_FIELD_DESCRIPTOR_PROTO_TYPE       5
+#define PB_FIELD_DESCRIPTOR_PROTO_TYPE_NAME  6
+
+/* Map Entry Tags */
+#define PB_MAP_ENTRY_KEY                     1
+#define PB_MAP_ENTRY_VALUE                   2
 
 /* 
  * PbType: Protobuf field types as defined in descriptor.proto.
@@ -120,7 +145,7 @@ encode_varint(uint64 val, StringInfo buf)
     } while (val);
 }
 
-#define PB_FIELD_TAG(num, type) (((num) << 3) | (type))
+#define PB_WIRE_TYPE_MASK 0x07
 
 /**
  * hex_val: Converts a hex character to its integer value.

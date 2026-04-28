@@ -144,4 +144,17 @@ CREATE OPERATOR || (
     FUNCTION = pb_merge
 );
 
+-- Add cast to bytea for convenience (e.g., for length() function)
+CREATE CAST (protobuf AS bytea) WITHOUT FUNCTION;
+
+CREATE FUNCTION pb_get_text_by_path(protobuf, text[]) RETURNS text
+    AS 'MODULE_PATHNAME', 'pb_get_text_by_path'
+    LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
+CREATE OPERATOR #>> (
+    LEFTARG = protobuf,
+    RIGHTARG = text[],
+    FUNCTION = pb_get_text_by_path
+);
+
 
