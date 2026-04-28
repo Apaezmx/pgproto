@@ -4,7 +4,7 @@ PG_CPPFLAGS = -std=c99 -I.
 
 EXTENSION = pgproto
 DATA = sql/pgproto--1.0.sql
-REGRESS = pgproto_test
+REGRESS = pgproto_test conformance_test
 
 PG_CONFIG ?= pg_config
 PGXS := $(shell "$(PG_CONFIG)" --pgxs)
