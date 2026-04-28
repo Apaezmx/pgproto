@@ -144,4 +144,7 @@ CREATE OPERATOR || (
     FUNCTION = pb_merge
 );
 
+-- Add cast to bytea for convenience (e.g., for length() function)
+CREATE CAST (protobuf AS bytea) WITHOUT FUNCTION;
+
 
