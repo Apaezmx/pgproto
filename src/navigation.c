@@ -1,35 +1,20 @@
 #include "pgproto.h"
-
-/*
- * Skip a protobuf field based on its wire type.
- * Updates the pointer to point past the skipped field.
- */
-static void
-skip_field(int wire_type, const char **ptr, const char *end)
-{
-    switch (wire_type) {
-        case PB_WIRE_VARINT:
-            decode_varint(ptr, end);
-            break;
-        case PB_WIRE_FIXED64:
-            *ptr += 8;
-            break;
-        case PB_WIRE_LENGTH_DELIMITED:
-            {
-                uint64 len = decode_varint(ptr, end);
-                *ptr += len;
-            }
-            break;
-        case PB_WIRE_FIXED32:
-            *ptr += 4;
-            break;
-        default:
-            elog(ERROR, "Unsupported wire type %d in field skip", wire_type);
-    }
-}
+#include <string.h>
+#include <ctype.h>
 
 PG_FUNCTION_INFO_V1(pb_get_int32);
 
+/**
+ * pb_get_int32: Extracts an int32 value from a Protobuf message by its tag number.
+ * 
+ * Inputs:
+ * - data (protobuf): The Protobuf binary data.
+ * - target_tag (int32): The tag number to look for.
+ * 
+ * Summary:
+ * Scans the Protobuf wire format sequentially. When the tag is found, it decodes
+ * the Varint value. If the tag is not found, returns NULL.
+ */
 Datum
 pb_get_int32(PG_FUNCTION_ARGS)
 {
@@ -40,58 +25,31 @@ pb_get_int32(PG_FUNCTION_ARGS)
 
     while (ptr < end) {
         uint64 key = decode_varint(&ptr, end);
-        int field_num = key >> PB_FIELD_NUM_SHIFT;
-        int wire_type = key & PB_WIRE_TYPE_MASK;
+        int field_num = (int)(key >> PB_FIELD_NUM_SHIFT);
+        int wire_type = (int)(key & PB_WIRE_TYPE_MASK);
 
         if (field_num == target_tag) {
-            if (wire_type == 0) { // Varint
+            if (wire_type == PB_WIRE_VARINT) {
                 uint64 val = decode_varint(&ptr, end);
                 PG_RETURN_INT32((int32) val);
             } else {
                 elog(ERROR, "Expected varint wire type for field %d, got %d", target_tag, wire_type);
             }
         }
-
-        switch (wire_type) {
-            case 0:
-                decode_varint(&ptr, end);
-                break;
-            case 1:
-                ptr += 8;
-                break;
-            case 2:
-                {
-                    uint64 len = decode_varint(&ptr, end);
-                    ptr += len;
-                }
-                break;
-            case 5:
-                ptr += 4;
-                break;
-            default:
-                elog(ERROR, "Unsupported wire type %d", wire_type);
-        }
+        skip_field(wire_type, &ptr, end);
     }
-
     PG_RETURN_NULL();
 }
 
 PG_FUNCTION_INFO_V1(protobuf_contains);
 
+/**
+ * protobuf_contains: Implementation of the @> operator.
+ * Checks if the 'base' protobuf contains all tag-value pairs present in 'query'.
+ */
 Datum
 protobuf_contains(PG_FUNCTION_ARGS)
 {
-    /* 
-     * This function checks if the 'base' protobuf contains all fields present in the 'query' protobuf.
-     * It iterates over all fields in 'query' and for each field, it scans the 'base'
-     * to find a matching field and value.
-     * 
-     * NOTE: This is an O(N*M) operation where N is query size and M is base size.
-     * For large messages, this could be a performance bottleneck.
-     * 
-     * NOTE: It uses manual skipping instead of skip_field() in some places to avoid
-     * function call overhead in hot loops, or because it was written before skip_field was available.
-     */
     ProtobufData *base = (ProtobufData *) PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
     ProtobufData *query = (ProtobufData *) PG_DETOAST_DATUM(PG_GETARG_DATUM(1));
     const char *q_ptr = query->data;
@@ -100,17 +58,15 @@ protobuf_contains(PG_FUNCTION_ARGS)
 
     while (q_ptr < q_end) {
         uint64 q_key = decode_varint(&q_ptr, q_end);
-        int q_field_num = q_key >> PB_FIELD_NUM_SHIFT;
-        int q_wire_type = q_key & PB_WIRE_TYPE_MASK;
+        int q_field_num = (int)(q_key >> PB_FIELD_NUM_SHIFT);
+        int q_wire_type = (int)(q_key & PB_WIRE_TYPE_MASK);
         uint64 q_val = 0;
         bool q_has_val = false;
 
         if (q_wire_type == PB_WIRE_VARINT) {
              q_val = decode_varint(&q_ptr, q_end);
              q_has_val = true;
-        } else if (q_wire_type == PB_WIRE_FIXED64) { q_ptr += 8; }
-        else if (q_wire_type == PB_WIRE_LENGTH_DELIMITED) { uint64 len = decode_varint(&q_ptr, q_end); q_ptr += len; }
-        else if (q_wire_type == PB_WIRE_FIXED32) { q_ptr += 4; }
+        } else skip_field(q_wire_type, &q_ptr, q_end);
 
         const char *b_ptr = base->data;
         const char *b_end = (const char *) base + VARSIZE(base);
@@ -118,44 +74,27 @@ protobuf_contains(PG_FUNCTION_ARGS)
 
         while (b_ptr < b_end) {
             uint64 b_key = decode_varint(&b_ptr, b_end);
-            int b_field_num = b_key >> PB_FIELD_NUM_SHIFT;
-            int b_wire_type = b_key & PB_WIRE_TYPE_MASK;
+            int b_field_num = (int)(b_key >> PB_FIELD_NUM_SHIFT);
+            int b_wire_type = (int)(b_key & PB_WIRE_TYPE_MASK);
 
             if (b_field_num == q_field_num) {
                 if (b_wire_type == PB_WIRE_VARINT && q_has_val) {
                     uint64 b_val = decode_varint(&b_ptr, b_end);
-                    if (b_val == q_val) {
-                         found_tag = true;
-                         break;
-                    }
-                } else if (b_wire_type == PB_WIRE_VARINT) { decode_varint(&b_ptr, b_end); }
-                else if (b_wire_type == PB_WIRE_FIXED64) { b_ptr += 8; }
-                else if (b_wire_type == PB_WIRE_LENGTH_DELIMITED) { uint64 len = decode_varint(&b_ptr, b_end); b_ptr += len; }
-                else if (b_wire_type == PB_WIRE_FIXED32) { b_ptr += 4; }
-                
-                if (!q_has_val) { 
-                     found_tag = true;
-                     break;
-                }
-            } else {
-                if (b_wire_type == PB_WIRE_VARINT) { decode_varint(&b_ptr, b_end); }
-                else if (b_wire_type == PB_WIRE_FIXED64) { b_ptr += 8; }
-                else if (b_wire_type == PB_WIRE_LENGTH_DELIMITED) { uint64 len = decode_varint(&b_ptr, b_end); b_ptr += len; }
-                else if (b_wire_type == PB_WIRE_FIXED32) { b_ptr += 4; }
-            }
+                    if (b_val == q_val) { found_tag = true; break; }
+                } else if (!q_has_val) { found_tag = true; break; }
+                else skip_field(b_wire_type, &b_ptr, b_end);
+            } else skip_field(b_wire_type, &b_ptr, b_end);
         }
-
-        if (!found_tag) {
-            match_all = false;
-            break;
-        }
+        if (!found_tag) { match_all = false; break; }
     }
-
     PG_RETURN_BOOL(match_all);
 }
 
 PG_FUNCTION_INFO_V1(pb_get_int32_by_name);
 
+/**
+ * pb_get_int32_by_name: Extracts an int32 value by message and field name.
+ */
 Datum
 pb_get_int32_by_name(PG_FUNCTION_ARGS)
 {
@@ -165,64 +104,50 @@ pb_get_int32_by_name(PG_FUNCTION_ARGS)
     char *msg_name = text_to_cstring(msg_name_text);
     char *field_name = text_to_cstring(field_name_text);
 
-    const upb_MessageDef *msg_def;
-    const upb_FieldDef *field_def;
     uint32_t field_number;
-
+    PbFieldLookup lookup;
     const char *ptr;
     const char *end;
 
-    if (s_def_pool == NULL) {
-        s_def_pool = upb_DefPool_New();
-        if (s_def_pool) {
-            pgproto_LoadAllSchemasFromDb(s_def_pool);
+    pgproto_LoadAllSchemasFromDb();
+    PbLookupStatus status = pgproto_lookup_field(msg_name, field_name, &lookup);
+    if (status != PB_LOOKUP_OK) {
+        if (status == PB_LOOKUP_MSG_NOT_FOUND) {
+            elog(ERROR, "Message not found in schema registry: %s", msg_name);
+        } else {
+            elog(ERROR, "Field %s not found in message %s", field_name, msg_name);
         }
     }
+    field_number = lookup.number;
 
-    if (s_def_pool == NULL) {
-        elog(ERROR, "Failed to initialize Schema Registry");
-    }
-
-    msg_def = upb_DefPool_FindMessageByName(s_def_pool, msg_name);
-    if (!msg_def) {
-        elog(ERROR, "Message not found in schema registry: %s", msg_name);
-    }
-
-    field_def = upb_MessageDef_FindFieldByName(msg_def, field_name);
-    if (!field_def) {
-        elog(ERROR, "Field not found in message %s: %s", msg_name, field_name);
-    }
-
-    field_number = upb_FieldDef_Number(field_def);
-
-    pfree(msg_name);
-    pfree(field_name);
+    pfree(msg_name); pfree(field_name);
 
     ptr = data->data;
     end = (const char *) data + VARSIZE(data);
 
     while (ptr < end) {
         uint64 key = decode_varint(&ptr, end);
-        int field_num = key >> PB_FIELD_NUM_SHIFT;
-        int wire_type = key & PB_WIRE_TYPE_MASK;
+        int field_num = (int)(key >> PB_FIELD_NUM_SHIFT);
+        int wire_type = (int)(key & PB_WIRE_TYPE_MASK);
 
-        if (field_num == field_number) {
-            if (wire_type == PB_WIRE_VARINT) { // Varint
+        if (field_num == (int)field_number) {
+            if (wire_type == PB_WIRE_VARINT) {
                 uint64 val = decode_varint(&ptr, end);
                 PG_RETURN_INT32((int32) val);
             } else {
-                elog(ERROR, "Expected varint wire type for field %u, got %d", field_number, wire_type);
+                elog(ERROR, "Expected varint wire type for field %s, got %d", field_name, wire_type);
             }
         }
-
         skip_field(wire_type, &ptr, end);
     }
-
     PG_RETURN_NULL();
 }
 
 PG_FUNCTION_INFO_V1(pb_get_int32_by_name_dot);
 
+/**
+ * pb_get_int32_by_name_dot: Extracts an int32 value using dot notation (e.g., "Message.Field").
+ */
 Datum
 pb_get_int32_by_name_dot(PG_FUNCTION_ARGS)
 {
@@ -231,303 +156,179 @@ pb_get_int32_by_name_dot(PG_FUNCTION_ARGS)
     char *path = text_to_cstring(path_text);
     
     char *dot = strchr(path, '.');
-    if (!dot) {
-        pfree(path);
-        elog(ERROR, "Path must be in format 'Message.Field'");
-    }
+    if (!dot) { pfree(path); elog(ERROR, "Path must be in format 'Message.Field'"); }
     
     *dot = '\0';
     char *msg_name = path;
     char *field_name = dot + 1;
-
-    const upb_MessageDef *msg_def;
-    const upb_FieldDef *field_def;
     uint32_t field_number;
+    PbFieldLookup lookup;
 
-    const char *ptr;
-    const char *end;
-
-    if (s_def_pool == NULL) {
-        s_def_pool = upb_DefPool_New();
-        if (s_def_pool) {
-            pgproto_LoadAllSchemasFromDb(s_def_pool);
+    pgproto_LoadAllSchemasFromDb();
+    PbLookupStatus status = pgproto_lookup_field(msg_name, field_name, &lookup);
+    if (status != PB_LOOKUP_OK) {
+        if (status == PB_LOOKUP_MSG_NOT_FOUND) {
+            elog(ERROR, "Message not found in schema registry: %s", msg_name);
+        } else {
+            elog(ERROR, "Field %s not found in message %s", field_name, msg_name);
         }
     }
+    field_number = lookup.number;
 
-    if (s_def_pool == NULL) {
-        pfree(path);
-        elog(ERROR, "Failed to initialize Schema Registry");
-    }
-
-    msg_def = upb_DefPool_FindMessageByName(s_def_pool, msg_name);
-    if (!msg_def) {
-        /* Note: We do not pfree(path) here because msg_name points into it,
-         * and elog(ERROR) will abort the transaction and clean up the memory
-         * context automatically, avoiding both leaks and use-after-free. */
-        elog(ERROR, "Message not found in schema registry: %s", msg_name);
-    }
-
-    field_def = upb_MessageDef_FindFieldByName(msg_def, field_name);
-    if (!field_def) {
-        pfree(path);
-        PG_RETURN_NULL();
-    }
-
-    field_number = upb_FieldDef_Number(field_def);
-
-    ptr = data->data;
-    end = (const char *) data + VARSIZE(data);
+    const char *ptr = data->data;
+    const char *end = (const char *) data + VARSIZE(data);
 
     while (ptr < end) {
         uint64 key = decode_varint(&ptr, end);
-        int field_num = key >> PB_FIELD_NUM_SHIFT;
-        int wire_type = key & PB_WIRE_TYPE_MASK;
-
-        if (field_num == field_number) {
-            if (wire_type == PB_WIRE_VARINT) { // Varint
+        int field_num = (int)(key >> PB_FIELD_NUM_SHIFT);
+        int wire_type = (int)(key & PB_WIRE_TYPE_MASK);
+        if (field_num == (int)field_number) {
+            if (wire_type == PB_WIRE_VARINT) {
                 uint64 val = decode_varint(&ptr, end);
-                pfree(path);
-                PG_RETURN_INT32((int32) val);
+                pfree(path); PG_RETURN_INT32((int32) val);
             } else {
                 pfree(path);
-                elog(ERROR, "Expected varint wire type for field %u, got %d", field_number, wire_type);
+                elog(ERROR, "Expected varint wire type for field %s, got %d", field_name, wire_type);
             }
         }
-
         skip_field(wire_type, &ptr, end);
     }
-
-    pfree(path);
-    PG_RETURN_NULL();
+    pfree(path); PG_RETURN_NULL();
 }
 
 PG_FUNCTION_INFO_V1(pb_get_int32_by_path);
 
+/**
+ * pb_get_int32_by_path: Implementation of the #> operator for path navigation.
+ * 
+ * Inputs:
+ * - data (protobuf)
+ * - path (text[]): E.g., ARRAY['Outer', 'inner', 'id'] or ARRAY['Outer', 'scores', '0']
+ * 
+ * Summary:
+ * Iteratively resolves each path element. If it's a message, it nests the parser
+ * into the submessage's length-delimited blob. Supports array indexing and map key lookups.
+ */
 Datum
 pb_get_int32_by_path(PG_FUNCTION_ARGS)
 {
     ProtobufData *data = (ProtobufData *) PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
     ArrayType *path_array = PG_GETARG_ARRAYTYPE_P(1);
     
-    int16 typlen;
-    bool typbyval;
-    char typalign;
-    Datum *elems;
-    bool *nulls;
-    int nelems;
-
+    int16 typlen; bool typbyval; char typalign; Datum *elems; bool *nulls; int nelems;
     get_typlenbyvalalign(TEXTOID, &typlen, &typbyval, &typalign);
     deconstruct_array(path_array, TEXTOID, typlen, typbyval, typalign, &elems, &nulls, &nelems);
     
     if (nelems == 0) PG_RETURN_NULL();
 
-    char *msg_name = text_to_cstring(DatumGetTextPP(elems[0]));
+    char current_msg[512];
+    char *msg_name_str = text_to_cstring(DatumGetTextPP(elems[0]));
+    strncpy(current_msg, msg_name_str, 511);
+    current_msg[511] = '\0';
+    pfree(msg_name_str);
 
-    if (s_def_pool == NULL) {
-        s_def_pool = upb_DefPool_New();
-        if (s_def_pool) {
-            pgproto_LoadAllSchemasFromDb(s_def_pool);
-        }
-    }
-
-    if (s_def_pool == NULL) {
-        elog(ERROR, "Failed to initialize Schema Registry");
-    }
-
-    const upb_MessageDef *msg_def = upb_DefPool_FindMessageByName(s_def_pool, msg_name);
-    if (!msg_def) {
-        elog(ERROR, "Message not found in schema registry: %s", msg_name);
-    }
+    pgproto_LoadAllSchemasFromDb();
 
     const char *ptr = data->data;
     const char *end = (const char *) data + VARSIZE(data);
 
     for (int i = 1; i < nelems; i++) {
         char *field_name = text_to_cstring(DatumGetTextPP(elems[i]));
-        const upb_FieldDef *field_def = upb_MessageDef_FindFieldByName(msg_def, field_name);
-        if (!field_def) {
-            pfree(field_name);
-            pfree(msg_name);
-            PG_RETURN_NULL();
-        }
+        PbFieldLookup lookup;
+        if (pgproto_lookup_field(current_msg, field_name, &lookup) != PB_LOOKUP_OK) { pfree(field_name); PG_RETURN_NULL(); }
 
-        uint32_t field_number = upb_FieldDef_Number(field_def);
-        bool is_repeated = upb_FieldDef_IsRepeated(field_def);
-        bool is_map = upb_FieldDef_IsMap(field_def);
-        
-        int target_index = 0;
-        bool has_index = false;
-        char *map_key = NULL;
+        uint32_t field_number = lookup.number;
+        bool is_repeated = lookup.is_repeated;
+        bool is_map = lookup.is_map;
+        int target_index = 0; char *map_key = NULL;
         
         if (is_repeated && !is_map && i + 1 < nelems) {
             char *next_elem = text_to_cstring(DatumGetTextPP(elems[i + 1]));
-            if (isdigit(next_elem[0])) {
-                target_index = atoi(next_elem);
-                has_index = true;
-                i++; // Consume index
-            }
+            if (isdigit(next_elem[0])) { target_index = atoi(next_elem); i++; }
             pfree(next_elem);
         } else if (is_map && i + 1 < nelems) {
-            map_key = text_to_cstring(DatumGetTextPP(elems[i + 1]));
-            i++; // Consume key
+            map_key = text_to_cstring(DatumGetTextPP(elems[i + 1])); i++;
         }
 
-        bool found = false;
-        int current_idx = 0;
-
+        bool found = false; int current_idx = 0;
         while (ptr < end) {
             uint64 key = decode_varint(&ptr, end);
-            int field_num = key >> PB_FIELD_NUM_SHIFT;
-            int wire_type = key & PB_WIRE_TYPE_MASK;
+            int field_num = (int)(key >> PB_FIELD_NUM_SHIFT);
+            int wire_type = (int)(key & PB_WIRE_TYPE_MASK);
 
-            if (field_num == field_number) {
+            if (field_num == (int)field_number) {
                 if (is_map) {
-                    /*
-                     * Map fields are encoded as a repeated sequence of submessages.
-                     * Each submessage (map entry) contains:
-                     * - Field 1: The key
-                     * - Field 2: The value
-                     * We must parse this submessage to find the matching key.
-                     */
                     if (wire_type == PB_WIRE_LENGTH_DELIMITED) {
                         uint64 len = decode_varint(&ptr, end);
-                        const char *entry_ptr = ptr;
-                        const char *entry_end = ptr + len;
-                        ptr += len; 
-                        
-                        const upb_MessageDef *entry_def = upb_FieldDef_MessageSubDef(field_def);
-                        const upb_FieldDef *key_field = upb_MessageDef_FindFieldByNumber(entry_def, 1);
-                        
-                        bool key_matched = false;
-                        uint64 val = 0;
-                        bool val_found = false;
-
+                        const char *entry_ptr = ptr; const char *entry_end = ptr + len; ptr += len; 
+                        bool key_matched = false; uint64 val = 0; bool val_found = false;
                         while (entry_ptr < entry_end) {
                             uint64 entry_key = decode_varint(&entry_ptr, entry_end);
-                            int entry_num = entry_key >> PB_FIELD_NUM_SHIFT;
-                            int entry_wire = entry_key & PB_WIRE_TYPE_MASK;
-
-                            if (entry_num == 1) { 
-                                if (upb_FieldDef_Type(key_field) == kUpb_FieldType_String) {
+                            int entry_num = (int)(entry_key >> 3); int entry_wire = (int)(entry_key & 0x07);
+                            if (entry_num == 1) { // key
+                                if (entry_wire == 2) { // string
                                     uint64 key_len = decode_varint(&entry_ptr, entry_end);
-                                    if (key_len == strlen(map_key) && memcmp(entry_ptr, map_key, key_len) == 0) {
-                                        key_matched = true;
-                                    }
+                                    if (key_len == strlen(map_key) && memcmp(entry_ptr, map_key, key_len) == 0) key_matched = true;
                                     entry_ptr += key_len;
-                                } else if (upb_FieldDef_Type(key_field) == kUpb_FieldType_Int32) {
-                                    uint64 key_val = decode_varint(&entry_ptr, entry_end);
-                                    if (key_val == atoi(map_key)) {
-                                        key_matched = true;
-                                    }
-                                }
-                            } else if (entry_num == 2) { 
-                                if (entry_wire == PB_WIRE_VARINT) {
-                                    val = decode_varint(&entry_ptr, entry_end);
-                                    val_found = true;
-                                } else {
-                                     skip_field(entry_wire, &entry_ptr, entry_end);
-                                }
-                            } else {
-                                 skip_field(entry_wire, &entry_ptr, entry_end);
-                            }
+                                } else if (entry_wire == 0) { if (decode_varint(&entry_ptr, entry_end) == atoi(map_key)) key_matched = true; }
+                            } else if (entry_num == 2) { // value
+                                if (entry_wire == 0) { val = decode_varint(&entry_ptr, entry_end); val_found = true; }
+                                else skip_field(entry_wire, &entry_ptr, entry_end);
+                            } else skip_field(entry_wire, &entry_ptr, entry_end);
                         }
-
                         if (key_matched && val_found) {
                             found = true;
                             if (i == nelems - 1) {
-                                pfree(field_name);
-                                pfree(msg_name);
-                                if (map_key) pfree(map_key);
+                                pfree(field_name); if (map_key) pfree(map_key);
                                 PG_RETURN_INT32((int32) val);
-                            } else {
-                                elog(ERROR, "Map value traversal beyond int32 not supported yet");
                             }
                         }
                     }
                 } else if (is_repeated) {
-                    if (wire_type == PB_WIRE_LENGTH_DELIMITED) { 
+                    if (wire_type == PB_WIRE_LENGTH_DELIMITED && lookup.type != PB_TYPE_MESSAGE) {
                         uint64 len = decode_varint(&ptr, end);
-                        if (upb_FieldDef_Type(field_def) == kUpb_FieldType_Message) {
-                            if (current_idx == target_index) {
-                                found = true;
-                                end = ptr + len;
-                                msg_def = upb_FieldDef_MessageSubDef(field_def);
-                                break; 
-                            } else {
-                                ptr += len; 
-                                current_idx++;
-                            }
-                        } else {
-                            const char *packed_end = ptr + len;
-                            while (ptr < packed_end && current_idx < target_index) {
-                                decode_varint(&ptr, packed_end); 
-                                current_idx++;
-                            }
-                            if (ptr < packed_end) {
-                                found = true;
-                                uint64 val = decode_varint(&ptr, packed_end);
-                                if (i == nelems - 1) {
-                                    pfree(field_name);
-                                    pfree(msg_name);
-                                    PG_RETURN_INT32((int32) val);
-                                } else {
-                                    elog(ERROR, "Cannot traverse into primitive element");
-                                }
-                            }
-                            ptr = packed_end; 
-                            break; 
+                        const char *packed_end = ptr + len;
+                        while (ptr < packed_end && current_idx < target_index) { decode_varint(&ptr, packed_end); current_idx++; }
+                        if (ptr < packed_end) {
+                            found = true; uint64 val = decode_varint(&ptr, packed_end);
+                            if (i == nelems - 1) { pfree(field_name); PG_RETURN_INT32((int32) val); }
                         }
-                    } else { 
+                        ptr = packed_end; break;
+                    } else {
                         if (current_idx == target_index) {
                             found = true;
-                            uint64 val = decode_varint(&ptr, end); 
-                            if (i == nelems - 1) {
-                                pfree(field_name);
-                                pfree(msg_name);
-                                PG_RETURN_INT32((int32) val);
+                            if (lookup.type == PB_TYPE_MESSAGE) {
+                                uint64 len = decode_varint(&ptr, end); const char *next_end = ptr + len;
+                                strncpy(current_msg, lookup.type_name, 511);
+                                ptr = ptr; end = next_end;
+                                break;
                             } else {
-                                elog(ERROR, "Cannot traverse into primitive element");
+                                uint64 val = decode_varint(&ptr, end);
+                                if (i == nelems - 1) { pfree(field_name); PG_RETURN_INT32((int32) val); }
                             }
-                        } else {
-                            skip_field(wire_type, &ptr, end);
-                            current_idx++;
-                        }
+                        } else { skip_field(wire_type, &ptr, end); current_idx++; }
                     }
                 } else {
                     found = true;
                     if (i == nelems - 1) {
                         if (wire_type == PB_WIRE_VARINT) {
                             uint64 val = decode_varint(&ptr, end);
-                            pfree(field_name);
-                            pfree(msg_name);
-                            PG_RETURN_INT32((int32) val);
-                        } else {
-                            elog(ERROR, "Expected varint wire type for field %s, got %d", field_name, wire_type);
-                        }
+                            pfree(field_name); PG_RETURN_INT32((int32) val);
+                        } else elog(ERROR, "Expected varint wire type for field %s, got %d", field_name, wire_type);
                     } else {
                         if (wire_type == PB_WIRE_LENGTH_DELIMITED) {
                             uint64 len = decode_varint(&ptr, end);
-                            end = ptr + len;
-                            msg_def = upb_FieldDef_MessageSubDef(field_def);
+                            const char *next_end = ptr + len;
+                            strncpy(current_msg, lookup.type_name, 511);
+                            end = next_end;
                             break;
-                        } else {
-                            elog(ERROR, "Expected length-delimited wire type for submessage %s, got %d", field_name, wire_type);
-                        }
+                        } else elog(ERROR, "Expected length-delimited wire type for submessage %s, got %d", field_name, wire_type);
                     }
                 }
-            } else {
-                skip_field(wire_type, &ptr, end);
-            }
+            } else skip_field(wire_type, &ptr, end);
         }
-
-        if (map_key) pfree(map_key);
-        pfree(field_name);
-        if (!found) {
-            pfree(msg_name);
-            PG_RETURN_NULL();
-        }
+        if (map_key) pfree(map_key); pfree(field_name);
+        if (!found) PG_RETURN_NULL();
     }
-
-    pfree(msg_name);
     PG_RETURN_NULL();
 }

@@ -2,6 +2,20 @@
 
 PG_FUNCTION_INFO_V1(protobuf_in);
 
+/**
+ * protobuf_in: Input function for the 'protobuf' type.
+ * Converts a hex-encoded string (e.g., '\x082a') to internal Protobuf binary data.
+ * 
+ * Inputs:
+ * - str (cstring): Hexadecimal representation of the Protobuf message.
+ * 
+ * Outputs:
+ * - result (ProtobufData*): Varlena structure containing the binary wire-format.
+ * 
+ * Failure Modes:
+ * - elog(ERROR) if the hex string length is not even.
+ * - elog(ERROR) if the hex string contains invalid characters.
+ */
 Datum
 protobuf_in(PG_FUNCTION_ARGS)
 {
@@ -38,6 +52,16 @@ protobuf_in(PG_FUNCTION_ARGS)
 
 PG_FUNCTION_INFO_V1(protobuf_out);
 
+/**
+ * protobuf_out: Output function for the 'protobuf' type.
+ * Converts internal binary Protobuf data to a hex-encoded string.
+ * 
+ * Inputs:
+ * - data (protobuf): Raw binary Protobuf message.
+ * 
+ * Outputs:
+ * - result_str (cstring): Hexadecimal string representation (prefixed with \x).
+ */
 Datum
 protobuf_out(PG_FUNCTION_ARGS)
 {

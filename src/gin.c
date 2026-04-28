@@ -1,22 +1,30 @@
 #include "pgproto.h"
 
-/*
- * Extract a single key from a protobuf stream and format it as a string
- * suitable for GIN indexing.
+/**
+ * extract_single_key: Helper to extract a GIN key from the current Protobuf field.
+ * 
+ * @param ptr: Current position in the Protobuf stream (advanced).
+ * @param end: End of the Protobuf stream.
+ * @param key_str: Output buffer for the string-encoded key.
+ * 
+ * Summary:
+ * Decodes the tag and wire type, then formats them into a string like "1=42" 
+ * for Varints or "2=len_delim" for others. This allows GIN to index 
+ * tag-value pairs.
  */
 static void
 extract_single_key(const char **ptr, const char *end, char *key_str)
 {
     uint64 key = decode_varint(ptr, end);
-    int field_num = key >> PB_FIELD_NUM_SHIFT;
-    int wire_type = key & PB_WIRE_TYPE_MASK;
+    int field_num = (int)(key >> PB_FIELD_NUM_SHIFT);
+    int wire_type = (int)(key & PB_WIRE_TYPE_MASK);
     
     uint64 val = 0;
     
     switch (wire_type) {
         case PB_WIRE_VARINT:
             val = decode_varint(ptr, end);
-            sprintf(key_str, "%d=%lu", field_num, val);
+            sprintf(key_str, "%d=%lu", field_num, (long)val);
             break;
         case PB_WIRE_FIXED64:
             *ptr += 8;
@@ -40,10 +48,15 @@ extract_single_key(const char **ptr, const char *end, char *key_str)
 
 PG_FUNCTION_INFO_V1(protobuf_gin_extract_value);
 
-/*
- * GIN Extract Value function for Protobuf.
- * Iterates over the binary Protobuf data and extracts field numbers/wire types as keys.
- * Formats them as strings (e.g., "1=42", "2=len_delim") for indexing.
+/**
+ * protobuf_gin_extract_value: GIN support function to extract all keys from a Protobuf message.
+ * 
+ * Inputs:
+ * - data (protobuf): The Protobuf message to index.
+ * 
+ * Summary:
+ * Iterates over all fields in the Protobuf message and produces a set of 
+ * string keys for the GIN index.
  */
 Datum
 protobuf_gin_extract_value(PG_FUNCTION_ARGS)
@@ -75,13 +88,16 @@ protobuf_gin_extract_value(PG_FUNCTION_ARGS)
     }
 
     *nkeys = cur_entries;
-    *nullFlags = NULL; // No nulls supported
+    *nullFlags = NULL;
     
     PG_RETURN_POINTER(entries);
 }
 
 PG_FUNCTION_INFO_V1(protobuf_gin_extract_query);
 
+/**
+ * protobuf_gin_extract_query: GIN support function to extract keys from a search query.
+ */
 Datum
 protobuf_gin_extract_query(PG_FUNCTION_ARGS)
 {
@@ -119,6 +135,13 @@ protobuf_gin_extract_query(PG_FUNCTION_ARGS)
 
 PG_FUNCTION_INFO_V1(protobuf_gin_consistent);
 
+/**
+ * protobuf_gin_consistent: GIN support function to check if a row matches the query.
+ * 
+ * Summary:
+ * For the @> operator, it returns true only if ALL keys in the query are present 
+ * in the indexed Protobuf row.
+ */
 Datum
 protobuf_gin_consistent(PG_FUNCTION_ARGS)
 {

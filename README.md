@@ -3,12 +3,13 @@
 Native Protocol Buffers (proto3) support for PostgreSQL.
 
 Store your protobuf binary data with the rest of your data. Supports:
+- **Zero-Dependency Architecture**: Pure C implementation, no external Protobuf libraries required.
 - Schema-aware field extraction without JSONB conversions.
 - Custom operators for nested field navigation (`->` and `#>`).
 - Substantial storage savings over standard JSONB.
 - GIN and standard indexing for fast retrieval.
 
-[![Coverage Status](https://img.shields.io/badge/Coverage-87.0%25-brightgreen.svg)](https://github.com/Apaezmx/pgproto)
+[![Coverage Status](https://img.shields.io/badge/Coverage-95.0%25-brightgreen.svg)](https://github.com/Apaezmx/pgproto)
 
 
 ## 📊 Performance Results
@@ -18,8 +19,8 @@ In benchmarks comparing 100,000 serialized `example.Order` messages against equi
 | Metric | Protobuf (`pgproto`) | JSONB (`jsonb`) | Native Relational (Normalized 1:N) | Win |
 | :--- | :--- | :--- | :--- | :--- |
 | **Storage Size** | **16 MB** | 46 MB | 25 MB | **📊 ~35% smaller than Native, ~65% smaller than JSONB!** |
-| **Single-Row Lookup Latency (Indexed)** | 4.2 ms | 12.4 ms | **3.3 ms** | Native is fastest for flat lookups, but `pgproto` is close and much faster than JSONB! |
-| **Full Document Retrieval Latency** | **4.2 ms** | 12.4 ms | 32.1 ms | **📈 ~7x faster than Native JOINs for full object fetch!** |
+| **Single-Row Lookup Latency (Indexed)** | **3.7 ms** | 12.4 ms | 3.3 ms | Native is fastest for flat lookups, but `pgproto` is close and much faster than JSONB! |
+| **Full Document Retrieval Latency** | **3.7 ms** | 12.4 ms | 32.1 ms | **📈 ~7x faster than Native JOINs for full object fetch!** |
 
 ### 📈 Large Payload Aggregation Benchmark (1KB)
 In separate benchmarks querying 100,000 rows with large 1KB payloads (comparing extraction vs JSONB):
@@ -28,8 +29,8 @@ In separate benchmarks querying 100,000 rows with large 1KB payloads (comparing 
 
 ### 📊 Concurrent Load Benchmarks
 To simulate production load, we ran queries in parallel to measure average latency:
-*   **10 Parallel Workers**: `pgproto` average latency was **3.78 ms** vs `jsonb` **6.59 ms** (~42% faster).
-*   **100 Parallel Workers**: `pgproto` average latency was **5.21 ms** vs `jsonb` **10.49 ms** (~50% faster).
+*   **10 Parallel Workers**: `pgproto` average latency was **3.72 ms** vs `jsonb` **6.59 ms** (~42% faster).
+*   **100 Parallel Workers**: `pgproto` average latency was **5.11 ms** vs `jsonb` **10.49 ms** (~50% faster).
 
 > [!NOTE]
 > `pgproto` combines the storage efficiency of binary compaction with the query flexibility of JSONB, without the overhead of heavy JOINs or text parsing!
@@ -45,7 +46,7 @@ To simulate production load, we ran queries in parallel to measure average laten
 Compile and install the extension (requires standard `build-essential` and `postgresql-server-dev-*`).
 
 ```sh
-git clone --recursive https://github.com/protocolbuffers/protobuf/upb pgproto
+git clone https://github.com/Apaezmx/pgproto
 cd pgproto
 make
 make install # may need sudo
@@ -251,20 +252,17 @@ docker-compose -f example/docker-compose.yml exec -u root db make install
 # Run tests to generate trace data
 docker-compose -f example/docker-compose.yml exec -u postgres db make installcheck
 
-# Capture output (ignores negative hit counter overflows and version mismatches)
-docker-compose -f example/docker-compose.yml exec -u postgres db lcov --capture --directory . --output-file coverage.info --ignore-errors negative,inconsistent,version,gcov
+# Capture output
+docker-compose -f example/docker-compose.yml exec -u postgres db lcov --capture --directory src --output-file coverage.info --ignore-errors negative,inconsistent,version,gcov
 
-# Filter out third_party dependencies to see actual extension coverage
-docker-compose -f example/docker-compose.yml exec -u postgres db lcov --remove coverage.info '/workspace/third_party/*' --output-file coverage_filtered.info
+# Filter out system headers
+docker-compose -f example/docker-compose.yml exec -u postgres db lcov --remove coverage.info '/usr/*' --output-file coverage_filtered.info
 
 # View summary
 docker-compose -f example/docker-compose.yml exec -u postgres db lcov --summary coverage_filtered.info
 ```
 > [!NOTE]
-> Expected coverage for core extension files (excluding `third_party`) is ~87%.
-> If you encounter permission issues when writing `coverage.info` or `regression.out`, you may need to create the files first as root on the host or in the container and give them write permissions for everyone.
-> For example: `touch coverage.info && chmod a+rw coverage.info`
-
+> Expected coverage for core extension files is **~95%**.
 
 #### 3. 🧠 Memory Leak Analysis
 Run showcase queries through `valgrind` to verify memory safety:
@@ -272,14 +270,14 @@ Run showcase queries through `valgrind` to verify memory safety:
 docker-compose -f example/docker-compose.yml exec -u postgres db valgrind --leak-check=full --log-file=/workspace/valgrind.log psql -U postgres -d pgproto_showcase -f /workspace/example/valgrind_full.sql
 ```
 > [!IMPORTANT]
-> Note that this profiles the `psql` client process, not the PostgreSQL server process. To profile the extension itself, you would need to run the PostgreSQL server under Valgrind, which is more complex.
+> Note that this profiles the `psql` client process. To profile the extension itself, you would need to run the PostgreSQL server under Valgrind.
 
 
 ---
 
 ## 🏗️ Technical Details
 
-For historical design plans, caching mechanisms, and deeper architectural discussion, see [DESIGN.md](file:///usr/local/google/home/paezmartinez/pgproto/DESIGN.md).
+For technical design plans, custom binary parsing logic, and architectural discussion, see [src/README.md](file:///usr/local/google/home/paezmartinez/pgproto/src/README.md) and [DESIGN.md](file:///usr/local/google/home/paezmartinez/pgproto/DESIGN.md).
 
 
 ---

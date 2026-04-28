@@ -1,10 +1,75 @@
-#include "src/pgproto.h"
-#include "upb/json/encode.h"
-#include "upb/wire/decode.h"
-#include "upb/mem/arena.h"
+#include "pgproto.h"
+#include <string.h>
+#include "lib/stringinfo.h"
+
+/**
+ * pb_to_json_inner: Recursive helper to convert a Protobuf binary blob to JSON.
+ * 
+ * @param ptr: Start of the binary blob.
+ * @param end: End of the binary blob.
+ * @param msg_name: Name of the message type for field resolution.
+ * @param buf: StringInfo buffer to append the JSON string to.
+ * 
+ * Summary:
+ * Iterates through the binary stream. For each field, it performs a reverse
+ * lookup (tag -> name) in the registry and formats the value according to its type.
+ * Nested messages trigger a recursive call.
+ */
+static void
+pb_to_json_inner(const char *ptr, const char *end, const char *msg_name, StringInfo buf)
+{
+    appendStringInfoChar(buf, '{');
+    bool first = true;
+
+    while (ptr < end) {
+        uint64 key = decode_varint(&ptr, end);
+        int field_num = (int)(key >> 3);
+        int wire_type = (int)(key & 0x07);
+        
+        PbFieldLookup lookup;
+        if (pgproto_lookup_field_by_number(msg_name, (uint32_t)field_num, &lookup)) {
+            if (!first) appendStringInfoString(buf, ",");
+            appendStringInfo(buf, "\"%s\":", lookup.name);
+            
+            if (wire_type == PB_WIRE_VARINT) { // Varint
+                uint64 val = decode_varint(&ptr, end);
+                if (lookup.type == PB_TYPE_BOOL) appendStringInfoString(buf, val ? "true" : "false");
+                else appendStringInfo(buf, "%ld", (long)val);
+            } else if (wire_type == PB_WIRE_LENGTH_DELIMITED) { // Length-delimited
+                uint64 len = decode_varint(&ptr, end);
+                if (lookup.type == PB_TYPE_MESSAGE) {
+                    pb_to_json_inner(ptr, ptr + len, lookup.type_name, buf);
+                } else {
+                    appendStringInfoChar(buf, '"');
+                    appendBinaryStringInfo(buf, ptr, (int)len);
+                    appendStringInfoChar(buf, '"');
+                }
+                ptr += len;
+            } else {
+                skip_field(wire_type, &ptr, end);
+                appendStringInfoString(buf, "null");
+            }
+            first = false;
+        } else {
+            skip_field(wire_type, &ptr, end);
+        }
+    }
+    appendStringInfoChar(buf, '}');
+}
 
 PG_FUNCTION_INFO_V1(pb_to_json);
 
+/**
+ * pb_to_json: SQL function to convert a Protobuf binary blob to a JSON text.
+ * 
+ * Inputs:
+ * - data (protobuf): Raw Protobuf binary data.
+ * - type (text): Fully qualified message type name.
+ * 
+ * Summary:
+ * Initializes the registry, prepares a StringInfo buffer, and calls the recursive
+ * encoder to produce a compact JSON representation.
+ */
 Datum
 pb_to_json(PG_FUNCTION_ARGS)
 {
@@ -12,64 +77,19 @@ pb_to_json(PG_FUNCTION_ARGS)
     text *message_type_text = PG_GETARG_TEXT_P(1);
     char *message_type_str = text_to_cstring(message_type_text);
     
-    // 1. Resolve message definition
-    if (!s_def_pool) {
-        s_def_pool = upb_DefPool_New();
-        pgproto_LoadAllSchemasFromDb(s_def_pool);
-    }
-    
-    const upb_MessageDef *msg_def = upb_DefPool_FindMessageByName(s_def_pool, message_type_str);
-    if (!msg_def) {
+    pgproto_LoadAllSchemasFromDb();
+
+    PbFieldLookup dummy;
+    if (pgproto_lookup_field(message_type_str, "", &dummy) == PB_LOOKUP_MSG_NOT_FOUND) {
         elog(ERROR, "Protobuf schema not found: %s", message_type_str);
     }
     
-    const upb_MiniTable *mini_table = upb_MessageDef_MiniTable(msg_def);
-    if (!mini_table) {
-        elog(ERROR, "Could not get mini table for %s", message_type_str);
-    }
-    
-    // 2. Decode binary to upb_Message
-    upb_Arena *arena = upb_Arena_New();
-    if (!arena) {
-        elog(ERROR, "Failed to create UPB arena");
-    }
-    
-    upb_Message *msg = upb_Message_New(mini_table, arena);
-    if (!msg) {
-        upb_Arena_Free(arena);
-        elog(ERROR, "Failed to create message instance for %s", message_type_str);
-    }
+    StringInfoData buf;
+    initStringInfo(&buf);
     
     size_t data_len = VARSIZE(pb_data) - VARHDRSZ;
-    upb_DecodeStatus status = upb_Decode(pb_data->data, data_len, msg, mini_table, NULL, 0, arena);
-    if (status != kUpb_DecodeStatus_Ok) {
-        upb_Arena_Free(arena);
-        elog(ERROR, "Failed to decode protobuf data: %s", upb_DecodeStatus_String(status));
-    }
+    pb_to_json_inner(pb_data->data, pb_data->data + data_len, message_type_str, &buf);
     
-    // 3. Convert to JSON
-    upb_Status json_status;
-    upb_Status_Clear(&json_status);
-    
-    // First pass override: get required size
-    size_t json_len = upb_JsonEncode(msg, msg_def, s_def_pool, 0, NULL, 0, &json_status);
-    if (!upb_Status_IsOk(&json_status)) {
-        upb_Arena_Free(arena);
-        elog(ERROR, "Failed to calculate JSON size: %s", upb_Status_ErrorMessage(&json_status));
-    }
-    
-    char *json_buf = palloc(json_len + 1);
-    upb_JsonEncode(msg, msg_def, s_def_pool, 0, json_buf, json_len + 1, &json_status);
-    if (!upb_Status_IsOk(&json_status)) {
-        upb_Arena_Free(arena);
-        pfree(json_buf);
-        elog(ERROR, "Failed to encode to JSON: %s", upb_Status_ErrorMessage(&json_status));
-    }
-    
-    upb_Arena_Free(arena);
-    
-    text *result_text = cstring_to_text(json_buf);
-    pfree(json_buf);
-    
-    PG_RETURN_TEXT_P(result_text);
+    pfree(message_type_str);
+    PG_RETURN_TEXT_P(cstring_to_text(buf.data));
 }
