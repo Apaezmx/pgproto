@@ -27,7 +27,7 @@ extract_single_key(const char **ptr, const char *end, char *key_str)
             sprintf(key_str, "%d=%lu", field_num, (long)val);
             break;
         case PB_WIRE_FIXED64:
-            *ptr += 8;
+            *ptr += PB_WIRE_FIXED64_SIZE;
             sprintf(key_str, "%d=64bit", field_num);
             break;
         case PB_WIRE_LENGTH_DELIMITED:
@@ -38,7 +38,7 @@ extract_single_key(const char **ptr, const char *end, char *key_str)
             }
             break;
         case PB_WIRE_FIXED32:
-            *ptr += 4;
+            *ptr += PB_WIRE_FIXED32_SIZE;
             sprintf(key_str, "%d=32bit", field_num);
             break;
         default:

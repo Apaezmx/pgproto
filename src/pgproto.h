@@ -65,6 +65,14 @@ typedef enum {
 #define PB_MAP_ENTRY_KEY                     1
 #define PB_MAP_ENTRY_VALUE                   2
 
+/* Fixed-size wire types sizes */
+#define PB_WIRE_FIXED64_SIZE                 8
+#define PB_WIRE_FIXED32_SIZE                 4
+
+/* Hexadecimal conversion constants */
+#define HEX_CHAR_BITS                        4
+#define HEX_PREFIX_LEN                       2
+
 /* 
  * PbType: Protobuf field types as defined in descriptor.proto.
  */

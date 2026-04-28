@@ -25,9 +25,9 @@ protobuf_in(PG_FUNCTION_ARGS)
     ProtobufData *result;
     size_t data_len;
 
-    if (len >= 2 && str[0] == '\\' && str[1] == 'x') {
-        str += 2;
-        len -= 2;
+    if (len >= HEX_PREFIX_LEN && str[0] == '\\' && str[1] == 'x') {
+        str += HEX_PREFIX_LEN;
+        len -= HEX_PREFIX_LEN;
     }
 
     if (len % 2 != 0) {
@@ -44,7 +44,7 @@ protobuf_in(PG_FUNCTION_ARGS)
         if (hi < 0 || lo < 0) {
             elog(ERROR, "Invalid character in hex string");
         }
-        result->data[i] = (hi << 4) | lo;
+        result->data[i] = (hi << HEX_CHAR_BITS) | lo;
     }
 
     PG_RETURN_POINTER(result);
@@ -75,9 +75,9 @@ protobuf_out(PG_FUNCTION_ARGS)
     result_str[1] = 'x';
 
     for (i = 0; i < len; i++) {
-        sprintf(result_str + 2 + i * 2, "%02x", (unsigned char) data->data[i]);
+        sprintf(result_str + HEX_PREFIX_LEN + i * 2, "%02x", (unsigned char) data->data[i]);
     }
-    result_str[len * 2 + 2] = '\0';
+    result_str[len * 2 + HEX_PREFIX_LEN] = '\0';
 
     PG_RETURN_CSTRING(result_str);
 }

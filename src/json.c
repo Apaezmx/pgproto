@@ -15,8 +15,8 @@ pb_to_json_inner(const char *ptr, const char *end, const char *msg_name, StringI
 
     while (ptr < end) {
         uint64 key = decode_varint(&ptr, end);
-        int field_num = (int)(key >> 3);
-        int wire_type = (int)(key & 0x07);
+        int field_num = (int)(key >> PB_FIELD_NUM_SHIFT);
+        int wire_type = (int)(key & PB_WIRE_TYPE_MASK);
         
         PbFieldLookup lookup;
         if (pgproto_lookup_field_by_number(msg_name, (uint32_t)field_num, &lookup) == PB_LOOKUP_OK) {
