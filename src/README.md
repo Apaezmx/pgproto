@@ -1,27 +1,30 @@
 # `src/` Directory Overview
 
-This directory contains the C source code for the `pgproto` PostgreSQL extension. The code is modularized into functional components.
+This directory contains the pure C source code for the `pgproto` PostgreSQL extension. The extension is built as a zero-dependency, schema-agnostic Protobuf engine optimized for high-performance storage and querying.
+
+## 🏗️ Architecture
+The extension is implemented in pure C99 without any external Protobuf libraries (like `upb` or C++ Protobuf). It uses an on-the-fly binary descriptor parser to resolve field metadata directly from `FileDescriptorSet` blobs stored in the database.
 
 ## 📂 File Distribution
 
 ### 🛠️ Core & Entry
-*   **[`pgproto.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/pgproto.c)**: The main entry point for the extension. Contains module magic (`PG_MODULE_MAGIC`) and global state definitions.
-*   **[`pgproto.h`](file:///usr/local/google/home/paezmartinez/pgproto/src/pgproto.h)**: Common internal header file. Includes PostgreSQL and `upb` headers, defines shared structures, and provides utility functions (like `decode_varint`).
+*   **[`pgproto.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/pgproto.c)**: The main entry point for the extension. Contains module magic (`PG_MODULE_MAGIC`) and boilerplate.
+*   **[`pgproto.h`](file:///usr/local/google/home/paezmartinez/pgproto/src/pgproto.h)**: The central internal header. Defines the Protobuf wire format types, `PbFieldLookup` structures, and shared inline functions for high-performance varint decoding and encoding.
 
 ### 📥 Type Handler
-*   **[`io.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/io.c)**: Contains standard PostgreSQL Type Input/Output handlers (`protobuf_in`, `protobuf_out`). Used for translating between text representation (hex strings) and binary storage.
+*   **[`io.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/io.c)**: Implements standard PostgreSQL Type Input/Output handlers. Manages the hex-encoded string representation used in SQL queries.
 
 ### 📜 Registry
-*   **[`registry.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/registry.c)**: Manages Protobuf Schema registration and server-side caching (`upb_DefPool`). Contains `pb_register_schema` and background loading routines.
+*   **[`registry.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/registry.c)**: The core schema engine. Implements a custom Protobuf binary parser that traverses descriptor blobs to resolve field names to tag numbers and types. Manages the session-level schema cache.
 
 ### 🧭 Navigation
-*   **[`navigation.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/navigation.c)**: Implements nested field extraction by path traversal. This powers the querying engine (resolving tags, array offsets, and maps).
+*   **[`navigation.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/navigation.c)**: The "hot-path" querying engine. Implements sequential wire-format scanning to perform nested field extraction, array indexing, and map key lookups without decoding the entire message.
 
 ### ✏️ Mutation
-*   **[`mutation.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/mutation.c)**: Implements modification operations (`pb_set`, `pb_insert`, `pb_delete`, `pb_merge`). Powers the update capabilities of the extension.
+*   **[`mutation.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/mutation.c)**: Implements high-performance modification operations. Uses a "last-tag-wins" append strategy for updates and tag-filtering for deletions to maintain high speed and memory efficiency.
 
-### 🔍 Human-Readable Conversion
-*   **[`json.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/json.c)**: Implements JSON conversion functions (`pb_to_json`). Translates binary protobuf messages into human-readable JSON format.
+### 📄 JSON Conversion
+*   **[`json.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/json.c)**: Implements dynamic Protobuf-to-JSON translation. Recursively decodes binary messages into human-readable JSON using metadata from the registry.
 
 ### 🔍 Indexing & GIN
-*   **[`gin.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/gin.c)**: Implements support functions for Generalized Inverted Index (GIN) lookups over Protobuf binary data. Includes extraction and consistency checks.
+*   **[`gin.c`](file:///usr/local/google/home/paezmartinez/pgproto/src/gin.c)**: Implements GIN index support. Extracts tag-value pairs from Protobuf blobs to enable blazing-fast indexed lookups (e.g., using the `@>` operator).

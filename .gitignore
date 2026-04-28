@@ -68,3 +68,7 @@ coverage-report/
 scratch/
 out/
 valgrind.log
+build.log
+regression.diffs
+dist/
+*.zip
