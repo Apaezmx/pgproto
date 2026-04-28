@@ -1,4 +1,13 @@
 -- Conformance Test Suite for pgproto
+-- This suite validates Protobuf wire-format interpretion and mutation logic.
+-- 
+-- NOTE ON EXPECTED RESULTS:
+-- 1. NULL (empty columns): Returned when a field is missing from the wire format 
+--    (standard Protobuf behavior) or when a path traversal fails.
+-- 2. ERROR: Raised when there is a wire-type mismatch (e.g., accessing a string as int32)
+--    or when the schema registry cannot find the requested message type.
+-- 3. Accessors: Use #> for integer/numeric extraction and #>> for text/string extraction.
+
 CREATE EXTENSION IF NOT EXISTS pgproto;
 CREATE TABLE pb_conformance (id serial, data protobuf);
 
@@ -28,16 +37,18 @@ SELECT data #> '{conformance.ConformanceMsg, r_int32_packed, 2}'::text[] FROM pb
 -- 3. Maps Test
 -- Verifies lookup of keys in both string-keyed and integer-keyed maps.
 -- Map entries are encoded as submessages containing 'key' (tag 1) and 'value' (tag 2).
+-- Note: String values require the #>> operator (text extractor).
 INSERT INTO pb_conformance (data) VALUES ('\x9a01080a026b31120276319a01080a026b3212027632a2010408011064');
-SELECT data #> '{conformance.ConformanceMsg, m_str_str, k1}'::text[] FROM pb_conformance WHERE id = 3;
+SELECT data #>> '{conformance.ConformanceMsg, m_str_str, k1}'::text[] FROM pb_conformance WHERE id = 3;
+SELECT data #>> '{conformance.ConformanceMsg, m_str_str, k2}'::text[] FROM pb_conformance WHERE id = 3;
 SELECT data #> '{conformance.ConformanceMsg, m_int_int, 1}'::text[] FROM pb_conformance WHERE id = 3;
 
 -- 4. Oneof Test
 -- Verifies that setting one field in a 'oneof' correctly overrides others.
 -- Our scanner returns NULL for fields in a oneof that are not present in the wire format.
 INSERT INTO pb_conformance (data) VALUES ('\xb2010b6f6e656f665f76616c7565');
-SELECT data #> '{conformance.ConformanceMsg, c_str}'::text[] FROM pb_conformance WHERE id = 4;
-SELECT data #> '{conformance.ConformanceMsg, c_int}'::text[] FROM pb_conformance WHERE id = 4; -- Should be NULL
+SELECT data #>> '{conformance.ConformanceMsg, c_str}'::text[] FROM pb_conformance WHERE id = 4;
+SELECT data #> '{conformance.ConformanceMsg, c_int}'::text[] FROM pb_conformance WHERE id = 4; -- Returns NULL as expected (not in wire)
 
 -- 5. Nested Message Test
 -- Verifies recursive traversal of nested messages. The scanner nests its depth

@@ -91,14 +91,14 @@ echo "Native Size:   $NATIVE_SIZE"
 
 echo "📈 --- Query Latency Comparison (Indexes) ---"
 $PSQL -c "CREATE INDEX IF NOT EXISTS idx_proto ON bench_proto ((data #> '{example.Order, order_id}'::text[]));"
-$PSQL -c "CREATE INDEX IF NOT EXISTS idx_jsonb ON bench_jsonb ((data ->> 'orderId'));"
+$PSQL -c "CREATE INDEX IF NOT EXISTS idx_jsonb ON bench_jsonb ((data ->> 'order_id'));"
 $PSQL -c "CREATE INDEX IF NOT EXISTS idx_native_order ON orders_native (order_id);"
 $PSQL -c "CREATE INDEX IF NOT EXISTS idx_native_items ON order_items_native (order_id);"
 
 echo "Running indexed lookups..."
 # order_id in the fixture is 1001
 PROTO_LATENCY=$($PSQL -c "EXPLAIN ANALYZE SELECT * FROM bench_proto WHERE (data #> '{example.Order, order_id}'::text[]) = 1001;" | grep 'Execution Time' | awk '{print $3}')
-JSONB_LATENCY=$($PSQL -c "EXPLAIN ANALYZE SELECT * FROM bench_jsonb WHERE data ->> 'orderId' = '1001';" | grep 'Execution Time' | awk '{print $3}')
+JSONB_LATENCY=$($PSQL -c "EXPLAIN ANALYZE SELECT * FROM bench_jsonb WHERE data ->> 'order_id' = '1001';" | grep 'Execution Time' | awk '{print $3}')
 NATIVE_SINGLE_LATENCY=$($PSQL -c "EXPLAIN ANALYZE SELECT * FROM orders_native WHERE order_id = 1001;" | grep 'Execution Time' | awk '{print $3}')
 NATIVE_JOIN_LATENCY=$($PSQL -c "EXPLAIN ANALYZE SELECT * FROM orders_native o JOIN order_items_native i ON o.id = i.order_id WHERE o.order_id = 1001;" | grep 'Execution Time' | awk '{print $3}')
 

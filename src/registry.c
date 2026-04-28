@@ -94,10 +94,10 @@ scan_fields(const char *ptr, const char *end, const char *target_name, uint32_t 
     const char *f_ptr = ptr;
     while (f_ptr < end) {
         uint64 key = decode_varint(&f_ptr, end);
-        int field_num = key >> 3;
-        int wire_type = key & 0x07;
+        int field_num = key >> PB_FIELD_NUM_SHIFT;
+        int wire_type = key & PB_WIRE_TYPE_MASK;
         
-        if (field_num == 2 && wire_type == 2) { // repeated FieldDescriptorProto field
+        if (field_num == PB_DESCRIPTOR_PROTO_FIELD && wire_type == PB_WIRE_LENGTH_DELIMITED) {
             uint64 len = decode_varint(&f_ptr, end);
             const char *f_end = f_ptr + len;
             const char *curr_f_ptr = f_ptr;
@@ -110,22 +110,22 @@ scan_fields(const char *ptr, const char *end, const char *target_name, uint32_t 
 
             while (curr_f_ptr < f_end) {
                 uint64 f_key = decode_varint(&curr_f_ptr, f_end);
-                int fn = f_key >> 3;
-                int fwt = f_key & 0x07;
-                if (fn == 1 && fwt == 2) { // name
+                int fn = f_key >> PB_FIELD_NUM_SHIFT;
+                int fwt = f_key & PB_WIRE_TYPE_MASK;
+                if (fn == PB_FIELD_DESCRIPTOR_PROTO_NAME && fwt == PB_WIRE_LENGTH_DELIMITED) { // name
                     uint64 nl = decode_varint(&curr_f_ptr, f_end);
                     size_t to_copy = nl < 255 ? nl : 255;
                     memcpy(f_name, curr_f_ptr, to_copy);
                     f_name[to_copy] = '\0';
                     curr_f_ptr += nl;
-                } else if (fn == 3 && fwt == 0) { // number
+                } else if (fn == PB_FIELD_DESCRIPTOR_PROTO_NUMBER && fwt == PB_WIRE_VARINT) { // number
                     f_num = (uint32_t) decode_varint(&curr_f_ptr, f_end);
-                } else if (fn == 4 && fwt == 0) { // label
+                } else if (fn == PB_FIELD_DESCRIPTOR_PROTO_LABEL && fwt == PB_WIRE_VARINT) { // label
                     uint64 label = decode_varint(&curr_f_ptr, f_end);
                     f_is_repeated = (label == 3);
-                } else if (fn == 5 && fwt == 0) { // type
+                } else if (fn == PB_FIELD_DESCRIPTOR_PROTO_TYPE && fwt == PB_WIRE_VARINT) { // type
                     f_type = (PbType) decode_varint(&curr_f_ptr, f_end);
-                } else if (fn == 6 && fwt == 2) { // type_name
+                } else if (fn == PB_FIELD_DESCRIPTOR_PROTO_TYPE_NAME && fwt == PB_WIRE_LENGTH_DELIMITED) { // type_name
                     uint64 nl = decode_varint(&curr_f_ptr, f_end);
                     size_t to_copy = nl < 255 ? nl : 255;
                     memcpy(f_type_name, curr_f_ptr, to_copy);
@@ -162,10 +162,10 @@ scan_messages(const char *ptr, const char *end, const char *prefix, const char *
     const char *m_ptr = ptr;
     while (m_ptr < end) {
         uint64 key = decode_varint(&m_ptr, end);
-        int field_num = key >> 3;
-        int wire_type = key & 0x07;
+        int field_num = key >> PB_FIELD_NUM_SHIFT;
+        int wire_type = key & PB_WIRE_TYPE_MASK;
         
-        if ((field_num == 4 || field_num == 3) && wire_type == 2) { // repeated DescriptorProto message_type (4) or nested_type (3)
+        if ((field_num == PB_FILE_DESCRIPTOR_PROTO_MESSAGE_TYPE || field_num == PB_DESCRIPTOR_PROTO_NESTED_TYPE) && wire_type == PB_WIRE_LENGTH_DELIMITED) {
             uint64 len = decode_varint(&m_ptr, end);
             const char *msg_inner_end = m_ptr + len;
             const char *name_ptr = m_ptr;
@@ -174,7 +174,7 @@ scan_messages(const char *ptr, const char *end, const char *prefix, const char *
             // Find name first
             while (name_ptr < msg_inner_end) {
                 uint64 mk = decode_varint(&name_ptr, msg_inner_end);
-                if ((mk >> 3) == 1 && (mk & 0x07) == 2) {
+                if ((mk >> PB_FIELD_NUM_SHIFT) == PB_DESCRIPTOR_PROTO_NAME && (mk & PB_WIRE_TYPE_MASK) == PB_WIRE_LENGTH_DELIMITED) {
                     uint64 nl = decode_varint(&name_ptr, msg_inner_end);
                     size_t to_copy = nl < 255 ? nl : 255;
                     memcpy(m_name, name_ptr, to_copy);
@@ -220,14 +220,14 @@ pgproto_lookup_internal(const char *message_name, const char *field_name, uint32
         const char *end = ptr + entry->len;
         while (ptr < end) {
             uint64 key = decode_varint(&ptr, end);
-            if ((key >> 3) == 1 && (key & 0x07) == 2) { // FileDescriptorProto
+            if ((key >> PB_FIELD_NUM_SHIFT) == PB_FILE_DESCRIPTOR_SET_FILE && (key & PB_WIRE_TYPE_MASK) == PB_WIRE_LENGTH_DELIMITED) {
                 uint64 len = decode_varint(&ptr, end);
                 const char *f_end = ptr + len;
                 const char *f_ptr = ptr;
                 char package[256] = {0};
                 while (f_ptr < f_end) {
                     uint64 fk = decode_varint(&f_ptr, f_end);
-                    if ((fk >> 3) == 2 && (fk & 0x07) == 2) {
+                    if ((fk >> PB_FIELD_NUM_SHIFT) == PB_FILE_DESCRIPTOR_PROTO_PACKAGE && (fk & PB_WIRE_TYPE_MASK) == PB_WIRE_LENGTH_DELIMITED) {
                         uint64 nl = decode_varint(&f_ptr, f_end);
                         size_t to_copy = nl < 255 ? nl : 255;
                         memcpy(package, f_ptr, to_copy);

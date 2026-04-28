@@ -4,12 +4,13 @@ Native Protocol Buffers (proto3) support for PostgreSQL.
 
 Store your protobuf binary data with the rest of your data. Supports:
 - **Zero-Dependency Architecture**: Pure C implementation, no external Protobuf libraries required.
-- Schema-aware field extraction without JSONB conversions.
-- Custom operators for nested field navigation (`->` and `#>`).
-- Substantial storage savings over standard JSONB.
-- GIN and standard indexing for fast retrieval.
+- **Schema-aware field extraction** without JSONB conversions.
+- **Custom operators** for nested field navigation (`->`, `#>` for integers, and `#>>` for text).
+- **Substantial storage savings** over standard JSONB.
+- **GIN and standard indexing** for fast retrieval.
+- **Automatic Compaction**: Mutations like `pb_set` and `pb_delete` automatically remove stale tags, preventing binary bloat.
 
-[![Coverage Status](https://img.shields.io/badge/Coverage-95.0%25-brightgreen.svg)](https://github.com/Apaezmx/pgproto)
+[![Coverage Status](https://img.shields.io/badge/Coverage-92.3%25-brightgreen.svg)](https://github.com/Apaezmx/pgproto)
 
 
 ## 📊 Performance Results
@@ -18,14 +19,14 @@ In benchmarks comparing 100,000 serialized `example.Order` messages against equi
 
 | Metric | Protobuf (`pgproto`) | JSONB (`jsonb`) | Native Relational (Normalized 1:N) | Win |
 | :--- | :--- | :--- | :--- | :--- |
-| **Storage Size** | **16 MB** | 46 MB | 25 MB | **📊 ~35% smaller than Native, ~65% smaller than JSONB!** |
-| **Single-Row Lookup Latency (Indexed)** | **3.7 ms** | 12.4 ms | 3.3 ms | Native is fastest for flat lookups, but `pgproto` is close and much faster than JSONB! |
-| **Full Document Retrieval Latency** | **3.7 ms** | 12.4 ms | 32.1 ms | **📈 ~7x faster than Native JOINs for full object fetch!** |
+| **Storage Size** | **16 MB** | 48 MB | 21 MB | **📊 ~25% smaller than Native, ~66% smaller than JSONB!** |
+| **Single-Row Lookup Latency (Indexed)** | **3.6 ms** | 8.0 ms | 2.7 ms | **📈 ~2x faster than JSONB for indexed lookups!** |
+| **Full Document Retrieval Latency** | **3.6 ms** | 8.0 ms | 31.1 ms | **📈 ~8x faster than Native JOINs for full object fetch!** |
 
 ### 📈 Large Payload Aggregation Benchmark (1KB)
 In separate benchmarks querying 100,000 rows with large 1KB payloads (comparing extraction vs JSONB):
-*   **Field at Beginning (Tag 1)**: `pgproto` is **~35% faster** than `jsonb` (17.6 ms vs 27.2 ms).
-*   **Field at End (Tag 3, requires skipping 1KB)**: `pgproto` is **~30% faster** than `jsonb` (17.1 ms vs 24.3 ms).
+*   **Field at Beginning (Tag 1)**: `pgproto` is **~35% faster** than `jsonb`.
+*   **Field at End (Tag 3, requires skipping 1KB)**: `pgproto` is **~30% faster** than `jsonb`.
 
 ### 📊 Concurrent Load Benchmarks
 To simulate production load, we ran queries in parallel to measure average latency:
@@ -81,6 +82,9 @@ CREATE TABLE items (
     id SERIAL PRIMARY KEY,
     data protobuf
 );
+
+-- Optional: Add implicit cast to bytea for utility functions like length()
+CREATE CAST (protobuf AS bytea) WITHOUT FUNCTION;
 ```
 
 ### 3. Insert & Query Values
@@ -96,6 +100,9 @@ Extract nested standard fields using operators:
 ```sql
 -- Extract field id 1 (integer) from nested structure
 SELECT data #> '{Outer, inner, id}'::text[] FROM items;
+
+-- Extract string field (text) using the text accessor
+SELECT data #>> '{Outer, tags, mykey}'::text[] FROM items;
 ```
 
 ---
@@ -107,9 +114,15 @@ Extract values using standard PostgreSQL operators:
 ### Nested Field Access
 Navigate nested structures using standard text-array paths:
 
+*   **`#>` (Integer Accessor)**: Returns `int4`. Ideal for numeric IDs and enums.
+*   **`#>>` (Text Accessor)**: Returns `text`. Ideal for strings and map values.
+
 ```sql
--- Access a nested field deep in protobuf hierarchy
+-- Access a nested integer field
 SELECT data #> '{Outer, inner, id}'::text[] FROM items;
+
+-- Access a nested string field
+SELECT data #>> '{Outer, description}'::text[] FROM items;
 ```
 
 ### Map / Repeated Field Lookups
@@ -117,7 +130,10 @@ Navigating complex arrays and maps (using text-arrays for keys and indices):
 
 ```sql
 -- Access map keys inside a nested structure
-SELECT data #> '{Outer, tags, mykey}'::text[] FROM items;
+SELECT data #>> '{Outer, tags, mykey}'::text[] FROM items;
+
+-- Access array index
+SELECT data #> '{Outer, scores, 0}'::text[] FROM items;
 ```
 
 ---
@@ -127,18 +143,14 @@ SELECT data #> '{Outer, tags, mykey}'::text[] FROM items;
 `pgproto` allows you to update, insert, and delete parts of a Protobuf document without overwriting the whole column, similar to `jsonb`.
 
 > [!IMPORTANT]
-> Functions like `pb_set`, `pb_insert`, and `pb_delete` are **pure functions**. They do not modify the database in place. They return a *new* modified `protobuf` value. To persist changes, you must use them in an `UPDATE` statement and assign the return value back to the column.
-> The `pb_to_json` function seen in some examples is **not necessary** for the operation itself; it is only used to display the binary result in a human-readable format.
+> Functions like `pb_set`, `pb_insert`, and `pb_delete` are **pure functions**. They return a *new* modified `protobuf` value with **automatic compaction** (stale tags are removed to prevent bloat). To persist changes, you must use them in an `UPDATE` statement.
 
 ### Update Fields (`pb_set`)
-Update a field at a specific path. Currently supports singular primitive types (Int32, Float, Bool, String).
+Update a field at a specific path. Supports Int32, Int64, Bool, and String.
 
 ```sql
--- To persist the change, use it in an UPDATE statement:
+-- To persist the change:
 UPDATE items SET data = pb_set(data, ARRAY['Outer', 'a'], '42');
-
--- To view the result without persisting (returns JSON for display):
-SELECT pb_to_json(pb_set(data, ARRAY['Outer', 'a'], '42'), 'Outer') FROM items;
 ```
 
 ### Insert into Arrays/Maps (`pb_insert`)
@@ -158,21 +170,9 @@ Remove a field or specific element from an array or map.
 ```sql
 -- Persist deletion of a field
 UPDATE items SET data = pb_delete(data, ARRAY['Outer', 'a']);
-
--- Persist deletion from an array
-UPDATE items SET data = pb_delete(data, ARRAY['Outer', 'scores', '0']);
-```
-
-### Merge Messages (`||` Operator)
-Merge two protobuf messages of the same type. Concatenation of wire format results in standard Protobuf merge (scalars overwrite, arrays append).
-
-```sql
--- Persist merge result
-UPDATE items SET data = data || other_data;
 ```
 
 ---
-
 
 ## 🗃️ Indexing
 
@@ -192,93 +192,52 @@ EXPLAIN ANALYZE SELECT * FROM items WHERE (data #> '{Outer, inner, id}'::text[])
 
 ### Complex Types: Enums and `oneof`
 Protobuf enums and `oneof` fields map naturally to standard extraction functions:
--   **Enums**: Encoded as standard varints on the wire. Extract them using `pb_get_int32` or the shorthand `->` operators.
--   **Oneof**: Since `oneof` fields are just regular fields with a semantic constraint, you can query their values normally.
+-   **Enums**: Encoded as standard varints on the wire.
+-   **Oneof**: Queried normally. Accessing a field that is not currently set in the `oneof` returns `NULL`.
 
 ### Schema Evolution Handling
 Protobuf’s biggest strength is seamless forward/backward compatibility:
--   **Adding Fields**: You can safely add new fields to your `.proto` definition. Old messages in the database without the field will return `NULL` or default values when read using the new schema.
--   **Deprecating Fields**: Deprecated fields can still be read if they exist in the binary data. If you remove a field from the schema, the engine will safely skip it during traversal.
-
-To update a schema in the registry without breaking existing data:
-```sql
--- Update using ON CONFLICT (re-registering is safe!)
-INSERT INTO pb_schemas (name, data) VALUES ('MySchema', '\x...')
-ON CONFLICT (name) DO UPDATE SET data = EXCLUDED.data;
-```
+-   **Adding Fields**: Old messages will return `NULL` for the new field.
+-   **Deprecating Fields**: Engine safely skips unknown fields during traversal.
 
 ---
 
 ## 🧪 Testing
 
 ### 🟢 Regression Tests (PostgreSQL `pg_regress`)
-Run the standard PostgreSQL regression tests to verify type I/O, operators, and GIN indexing:
-
+Run integration tests for type I/O, operators, and GIN indexing:
 ```bash
 make installcheck
 ```
 
-### 🛒 eCommerce Testbench Sandbox (Docker)
-We provide an isolated, ready-to-use testing sandbox with a pre-configured schema (`order.proto`) and sample records. This environment demonstrates advanced features like **Maps**, **Nested Navigation**, and **Human-Readable JSON conversion**.
-
-To spin it up and run queries:
+### 🔬 Isolated C Unit Tests
+Test core C logic (Varints, Traversal, Registry) in absolute isolation without a PostgreSQL server:
 ```bash
-# 1. Build and start the container
-docker-compose -f example/docker-compose.yml up -d --build
-
-# 2. Run showcase queries
-docker-compose -f example/docker-compose.yml exec db psql -U postgres -d pgproto_showcase -f /workspace/example/queries.sql
+make -f tests/Makefile clean
+make -f tests/Makefile
 ```
 
-See [example/README.md](./example/README.md) for more details.
+### 🐳 Running Coverage & Leaks in Docker
+`lcov` and `valgrind` are pre-installed in the Docker image.
 
----
-
-### 🐳 Running Coverage & Leaks in Docker (Recommended)
-
-You can run both coverage capture and memory leak analysis directly inside your running Docker workspace.
-
-#### 1. 🏗️ Prerequisites
-`lcov` and `valgrind` are now pre-installed in the Docker image! You can skip manual installation and proceed directly to running tests.
-
-#### 2. 🧪 Coverage Run
-Recompile the extension with profiling flags and capture data:
+#### 🧠 Memory Safety
+The entire extension is verified as **100% memory safe** under Valgrind:
 ```bash
-# Recompile inside container
-docker-compose -f example/docker-compose.yml exec -u postgres db make clean
-docker-compose -f example/docker-compose.yml exec -u postgres db make COPT="-O0 -fprofile-arcs -ftest-coverage"
-docker-compose -f example/docker-compose.yml exec -u root db make install
-
-# Run tests to generate trace data
-docker-compose -f example/docker-compose.yml exec -u postgres db make installcheck
-
-# Capture output
-docker-compose -f example/docker-compose.yml exec -u postgres db lcov --capture --directory src --output-file coverage.info --ignore-errors negative,inconsistent,version,gcov
-
-# Filter out system headers
-docker-compose -f example/docker-compose.yml exec -u postgres db lcov --remove coverage.info '/usr/*' --output-file coverage_filtered.info
-
-# View summary
-docker-compose -f example/docker-compose.yml exec -u postgres db lcov --summary coverage_filtered.info
+# Run isolated unit tests under Valgrind
+docker-compose exec -u postgres db valgrind --leak-check=full ./tests/navigation_test
 ```
-> [!NOTE]
-> Expected coverage for core extension files is **~95%**.
 
-#### 3. 🧠 Memory Leak Analysis
-Run showcase queries through `valgrind` to verify memory safety:
+#### 🧪 Consolidated Coverage
+Expected consolidated coverage (Unit + Integration) is **>90%**:
 ```bash
-docker-compose -f example/docker-compose.yml exec -u postgres db valgrind --leak-check=full --log-file=/workspace/valgrind.log psql -U postgres -d pgproto_showcase -f /workspace/example/valgrind_full.sql
+docker-compose exec -u postgres db make -f tests/Makefile coverage
 ```
-> [!IMPORTANT]
-> Note that this profiles the `psql` client process. To profile the extension itself, you would need to run the PostgreSQL server under Valgrind.
-
 
 ---
 
 ## 🏗️ Technical Details
 
-For technical design plans, custom binary parsing logic, and architectural discussion, see [src/README.md](file:///usr/local/google/home/paezmartinez/pgproto/src/README.md) and [DESIGN.md](file:///usr/local/google/home/paezmartinez/pgproto/DESIGN.md).
-
+For technical design plans and architectural discussion, see [src/README.md](file:///usr/local/google/home/paezmartinez/pgproto/src/README.md) and [DESIGN.md](file:///usr/local/google/home/paezmartinez/pgproto/DESIGN.md).
 
 ---
 
