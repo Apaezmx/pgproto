@@ -279,7 +279,7 @@ pb_get_by_path_common(PG_FUNCTION_ARGS, bool as_text)
                             if (lookup.type == PB_TYPE_MESSAGE) {
                                 uint64 len = decode_varint(&ptr, end); const char *next_end = ptr + len;
                                 strncpy(current_msg, lookup.type_name, 511);
-                                ptr = ptr; end = next_end;
+                                end = next_end;
                                 break;
                             } else {
                                 uint64 val = decode_varint(&ptr, end);
