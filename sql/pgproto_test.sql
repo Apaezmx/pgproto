@@ -342,3 +342,6 @@ SELECT pb_insert('\x'::protobuf, ARRAY['NonExistentMessage', 'f', '0'], '1.23');
 
 
 
+
+-- 36. Test pb_to_json escaping
+SELECT pb_to_json(pb_insert('\x'::protobuf, ARRAY['CoverageMsg', 'str_arr', '0'], E'hello "world"\\\n\t\b\f\r'), 'CoverageMsg');
