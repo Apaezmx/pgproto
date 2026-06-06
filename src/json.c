@@ -44,7 +44,25 @@ pb_to_json_inner(const char *ptr, const char *end, const char *msg_name, StringI
                     pb_to_json_inner(ptr, ptr + len, lookup.type_name, buf);
                 } else {
                     appendStringInfoChar(buf, '"');
-                    appendBinaryStringInfo(buf, ptr, (int)len);
+                    for (int i = 0; i < (int)len; i++) {
+                        char c = ptr[i];
+                        switch (c) {
+                            case '"': appendStringInfoString(buf, "\\\""); break;
+                            case '\\': appendStringInfoString(buf, "\\\\"); break;
+                            case '\b': appendStringInfoString(buf, "\\b"); break;
+                            case '\f': appendStringInfoString(buf, "\\f"); break;
+                            case '\n': appendStringInfoString(buf, "\\n"); break;
+                            case '\r': appendStringInfoString(buf, "\\r"); break;
+                            case '\t': appendStringInfoString(buf, "\\t"); break;
+                            default:
+                                if ((unsigned char)c < 0x20) {
+                                    appendStringInfo(buf, "\\u%04x", (unsigned char)c);
+                                } else {
+                                    appendStringInfoChar(buf, c);
+                                }
+                                break;
+                        }
+                    }
                     appendStringInfoChar(buf, '"');
                 }
                 ptr += len;

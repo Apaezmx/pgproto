@@ -569,3 +569,9 @@ ERROR:  Field nonexistent not found in message CoverageMsg
 -- 35. Test pb_insert error: Message not found
 SELECT pb_insert('\x'::protobuf, ARRAY['NonExistentMessage', 'f', '0'], '1.23');
 ERROR:  Message not found in schema registry: NonExistentMessage
+-- 36. Test pb_to_json escaping
+SELECT pb_to_json(pb_insert('\x'::protobuf, ARRAY['CoverageMsg', 'str_arr', '0'], E'hello "world"\\\n\t\b\f\r'), 'CoverageMsg');
+                 pb_to_json
+---------------------------------------------
+ {"str_arr":["hello \"world\"\\\n\t\b\f\r"]}
+(1 row)
